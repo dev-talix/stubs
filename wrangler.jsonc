@@ -1,0 +1,30 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "snapkey",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-08-15",
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "SECRET_BOX", "class_name": "SecretBox" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SecretBox"] }],
+  // Abuse guards, keyed per client IP in the worker.
+  "ratelimits": [
+    {
+      "name": "CREATE_LIMITER",
+      "namespace_id": "4201",
+      "simple": { "limit": 30, "period": 60 }
+    },
+    {
+      "name": "READ_LIMITER",
+      "namespace_id": "4202",
+      "simple": { "limit": 120, "period": 60 }
+    }
+  ],
+  "routes": [{ "pattern": "keyshare.talix.app", "custom_domain": true }],
+  "workers_dev": false,
+  "preview_urls": false
+}

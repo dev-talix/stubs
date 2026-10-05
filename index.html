@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="robots" content="noindex" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#1c1b19" />
+    <meta name="description" content="Share .env values through a link that opens once. Encrypted in your browser." />
+    <title>Snapkey · one-time .env tickets</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <div class="desk">
+      <header class="desk-bar">
+        <a class="wordmark" href="/">snapkey</a>
+        <span>one-time .env tickets</span>
+      </header>
+
+      <main class="machine">
+        <div class="printer" aria-hidden="true"><span class="slot"></span></div>
+        <div class="paper">
+          <article class="receipt" id="receipt">
+            <noscript>
+              <p class="lede">Snapkey encrypts in your browser, so it needs JavaScript to run.</p>
+            </noscript>
+          </article>
+        </div>
+      </main>
+
+      <footer class="desk-foot">
+        <ol class="how">
+          <li><span>01</span> Paste a .env. It's encrypted right here, in your browser.</li>
+          <li><span>02</span> The key goes in the link, after the #. Our server never sees it.</li>
+          <li><span>03</span> The first person to open the link gets the values. Then it's void.</li>
+        </ol>
+      </footer>
+    </div>
+    <p id="announcer" class="sr-only" role="status" aria-live="polite"></p>
+    <script type="module" src="/src/client/main.ts"></script>
+  </body>
+</html>
