@@ -1,4 +1,4 @@
-import { formatPrintTime, h } from "./dom";
+import { formatPrintTime, h, playAnimation } from "./dom";
 
 /** The header every receipt starts with: brand, kind of ticket, and print time. */
 export function receiptHead(kind: string, stamp?: HTMLElement): HTMLElement {
@@ -40,6 +40,29 @@ export function barcode(): HTMLElement {
     bars.append(bar);
   }
   return bars;
+}
+
+/**
+ * Hangs a tear-off stub below the receipt as its own strip of paper. Until it's torn the two
+ * read as one continuous receipt; tearing leaves the receipt with a ragged edge.
+ */
+export function attachStub(receipt: HTMLElement, stub: HTMLElement) {
+  detachStub(receipt);
+  stub.classList.add("receipt", "stub-paper");
+  receipt.classList.add("has-stub");
+  receipt.after(stub);
+}
+
+export function detachStub(receipt: HTMLElement) {
+  receipt.classList.remove("has-stub");
+  receipt.parentElement?.querySelector(".stub-paper")?.remove();
+}
+
+/** Tears the stub away: the receipt gets its torn edge back and the stub drops into the dark. */
+export async function tearStub(receipt: HTMLElement, stub: HTMLElement) {
+  receipt.classList.remove("has-stub");
+  await playAnimation(stub, "is-torn");
+  stub.remove();
 }
 
 /** Plays the paper-feed animation on a freshly printed receipt. */

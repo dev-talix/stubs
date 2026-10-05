@@ -1,8 +1,17 @@
 import { claimSecret, secretStatus } from "./api";
 import { TICKET_KEY_PATTERN, deriveTicket, open, type Ticket } from "./crypto";
-import { copyText, flashLabel, formatStamp, h, playAnimation, setChildren } from "./dom";
+import { copyText, flashLabel, formatStamp, h, setChildren } from "./dom";
 import { parseDotenv } from "./dotenv";
-import { feed, perforation, receiptHead, rule, voidStamp } from "./receipt";
+import {
+  attachStub,
+  detachStub,
+  feed,
+  perforation,
+  receiptHead,
+  rule,
+  tearStub,
+  voidStamp,
+} from "./receipt";
 
 type Announce = (message: string) => void;
 
@@ -119,7 +128,7 @@ function renderSealed(receipt: HTMLElement, ticket: Ticket, expiresAt: number, a
       });
     }
 
-    await playAnimation(stub, "is-torn");
+    await tearStub(receipt, stub);
     renderOpened(receipt, plaintext, announce);
   });
 
@@ -133,12 +142,13 @@ function renderSealed(receipt: HTMLElement, ticket: Ticket, expiresAt: number, a
       { class: "lede" },
       "Someone sent you environment variables. They're encrypted, and only this link can open them.",
     ),
-    stub,
   );
+  attachStub(receipt, stub);
   announce("Ticket found. It can be opened once.");
 }
 
 function renderOpened(receipt: HTMLElement, plaintext: string, announce: Announce) {
+  detachStub(receipt);
   window.addEventListener("beforeunload", (event) => event.preventDefault());
 
   const lines = parseDotenv(plaintext);
@@ -234,6 +244,8 @@ function renderMessage(
   if (retry && message.retry) retry.addEventListener("click", message.retry);
 
   const home = h("a", { class: "text-button", href: "/" }, "PRINT YOUR OWN");
+
+  detachStub(receipt);
 
   setChildren(
     receipt,

@@ -75,6 +75,8 @@ body {
 /* ---------- Desk ---------- */
 
 .desk {
+  /* Keeps a falling stub from stretching the page. */
+  overflow: clip;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -131,7 +133,8 @@ body {
   position: relative;
   z-index: 1;
   margin: -10px 20px 0;
-  clip-path: inset(0 -60px -80px -60px);
+  /* Only the top is clipped (at the slot); a torn stub can fall well below the paper. */
+  clip-path: inset(0 -100vw -100vh -100vw);
   filter: drop-shadow(0 18px 22px rgb(0 0 0 / 0.45)) drop-shadow(0 2px 2px rgb(0 0 0 / 0.3));
 }
 
@@ -533,14 +536,33 @@ body {
 }
 
 .stub .perf {
+  margin-top: 0;
   margin-bottom: 8px;
+}
+
+/* Receipt and stub are two strips of paper that read as one until the tear. */
+.receipt.has-stub {
+  padding-bottom: 16px;
+  mask: none;
+}
+
+.stub-paper {
+  margin-top: -1px;
+  /* Padding, not the perforation's margin, so nothing collapses into a gap at the seam. */
+  padding-top: 12px;
 }
 
 .stub .print {
   margin-top: 20px;
 }
 
-.stub.is-torn {
+.stub-paper.is-torn {
+  /* Ragged on both edges once it's off the receipt. */
+  mask:
+    conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg) top /
+      calc(var(--tooth) * 2) 51% repeat-x,
+    conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom /
+      calc(var(--tooth) * 2) 51% repeat-x;
   transform-origin: 85% 0;
   animation: tear 560ms cubic-bezier(0.5, 0, 0.75, 0) forwards;
 }
