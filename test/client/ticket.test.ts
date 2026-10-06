@@ -28,8 +28,8 @@ describe("parseTicketFragment", () => {
   });
 
   it("round-trips through ticketLink", () => {
-    const link = ticketLink("https://keyshare.talix.app", KEY as TicketCapability);
-    expect(link).toBe(`https://keyshare.talix.app/t#v1.${KEY}`);
+    const link = ticketLink("https://stubs.talix.app", KEY as TicketCapability);
+    expect(link).toBe(`https://stubs.talix.app/t#v1.${KEY}`);
     expect(parseTicketFragment(new URL(link).hash)).toEqual({ kind: "ticket", capability: KEY });
   });
 });

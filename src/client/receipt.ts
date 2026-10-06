@@ -25,7 +25,7 @@ export function showReceipt(receipt: HTMLElement, screen: ReceiptScreen, announc
   const head = h(
     "header",
     { class: "receipt-head" },
-    h("p", { class: "brand" }, "SNAPKEY"),
+    h("p", { class: "brand" }, "STUBS"),
     h(
       "p",
       { class: "receipt-meta" },

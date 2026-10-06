@@ -15,7 +15,7 @@ import {
 import handler from "../../src/worker/index";
 import type { SecretBox } from "../../src/worker/secret-box";
 
-const BASE_URL = "https://snapkey.test";
+const BASE_URL = "https://stubs.test";
 const VALID_ID = "AbCdEfGhIjKlMnOpQrStUv";
 const VALID_IV = "AbCdEfGhIjKlMnOp";
 const VALID_CIPHERTEXT = "AbCdEfGhIjKlMnOpQrStUvWx";
@@ -335,7 +335,7 @@ describe("cross-site and abuse guards", () => {
         { "Sec-Fetch-Site": "" },
         { Origin: "https://attacker.test" },
         { Origin: "null" },
-        { Origin: "https://snapkey.test:444" },
+        { Origin: "https://stubs.test:444" },
         { "Sec-Fetch-Site": "same-origin", Origin: "https://attacker.test" },
       ];
       for (const headers of blockedHeaders) {

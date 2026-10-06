@@ -28,7 +28,7 @@ if (location.pathname.replace(/\/+$/, "") === "/t") {
     // No ticket in the link or in this tab: it was already used here, or never existed.
     location.replace("/");
   } else {
-    document.title = "A ticket for you · Snapkey";
+    document.title = "A stub for you · Stubs";
     let finished = false;
 
     // A used ticket must not come back. Blank the page before the browser snapshots it for

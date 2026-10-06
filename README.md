@@ -1,9 +1,9 @@
 <img src="assets/icon.svg" width="64" height="64" alt="">
 
-# snapkey
+# Stubs
 
-Share `.env` values through a link that opens once. Deploys to
-[keyshare.talix.app](https://keyshare.talix.app) (not live yet).
+Share `.env` values through a link that opens once. Live at
+[stubs.talix.app](https://stubs.talix.app).
 
 Paste a `.env`, pick how long the link stays valid (5 min, 1 hour, 1 day, 7 days), and print a
 ticket. The first person to open the link and tear the ticket gets the values. After that, or at
@@ -34,7 +34,9 @@ expiry, the server copy is deleted.
 - The page takes the key out of the address bar as soon as it loads. Once a ticket is opened or
   found void, the tab forgets it: refreshing, going back, or reopening the tab lands on the
   create page, and the opened page is blanked before the browser can cache it.
-- Strict CSP with no third-party origins. Fonts are self-hosted.
+- Strict CSP with no third-party origins. Fonts are self-hosted. This also blocks anything the
+  edge injects into pages (such as Cloudflare's Web Analytics beacon), which could otherwise
+  read the URL while the key is still in it.
 
 ## Known limits
 
@@ -88,7 +90,7 @@ pnpm dev          # Vite + local workerd on http://localhost:5173
 pnpm test         # worker + client tests
 pnpm typecheck    # wrangler types, then tsc -b
 pnpm build
-pnpm deploy       # build, then wrangler deploy to keyshare.talix.app
+pnpm deploy       # build, then wrangler deploy to stubs.talix.app
 ```
 
 `compatibility_date` is pinned to a date the bundled test runtime supports. Bump it together

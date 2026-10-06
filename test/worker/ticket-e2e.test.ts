@@ -15,7 +15,7 @@ import {
 } from "../../src/client/ticket";
 import { MAX_PLAINTEXT_BYTES } from "../../src/shared/protocol";
 
-const ORIGIN = "https://keyshare.test";
+const ORIGIN = "https://stubs.test";
 const worker = (exports as { default: Fetcher }).default;
 
 afterEach(async () => {
