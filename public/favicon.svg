@@ -1,5 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="6" fill="#1c1b19"/>
-  <path d="M8 5h16v19l-2 2-2-2-2 2-2-2-2 2-2-2-2 2-2-2z" fill="#f6f3ec"/>
-  <path d="M11 11h10M11 15h10M11 19h6" stroke="#1c1b19" stroke-width="2"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs><mask id="notches"><rect width="64" height="64" fill="#fff"/>
+    <circle cx="8" cy="32" r="5" fill="#000"/><circle cx="56" cy="32" r="5" fill="#000"/></mask></defs>
+  <rect width="64" height="64" rx="14" fill="#1c1b19"/>
+  <g transform="translate(32 32) scale(1) translate(-32 -32) rotate(-10 32 32)">
+    <rect x="8" y="17" width="48" height="30" rx="2.5" fill="#f6f3ec" mask="url(#notches)"/>
+    <line x1="22.5" y1="19.8" x2="22.5" y2="44.2" stroke="#1c1b19" stroke-width="2.4" stroke-dasharray="3 2.6"/>
+    <rect x="28.5" y="24" width="21" height="4.4" fill="#1b1a17"/>
+    <rect x="28.5" y="31.4" width="13.5" height="4.4" fill="#1b1a17"/>
+  </g>
 </svg>

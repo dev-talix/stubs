@@ -1,6 +1,6 @@
 {
   "name": "@talix/stubs",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Pull one-time .env stubs from stubs.talix.app into a project without ever printing the values.",
   "keywords": [
     "env",
@@ -38,7 +38,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "esbuild src/main.ts --bundle --platform=node --format=esm --target=node20 --packages=external --outfile=dist/stubs.js --banner:js='#!/usr/bin/env node' && chmod +x dist/stubs.js",
+    "build": "esbuild src/main.ts --bundle --platform=node --format=esm --target=node20 --packages=external --loader:.md=text --outfile=dist/stubs.js --banner:js='#!/usr/bin/env node' && chmod +x dist/stubs.js",
     "prepack": "npm run build"
   },
   "dependencies": {

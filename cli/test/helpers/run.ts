@@ -12,7 +12,14 @@ export interface RunResult {
 /** Runs the CLI in-process against a fake server, capturing both streams. */
 export async function runCli(
   args: string[],
-  options: { server: FakeServer; cwd: string; stdin?: string; env?: Record<string, string>; home?: string },
+  options: {
+    server: FakeServer;
+    cwd: string;
+    stdin?: string;
+    env?: Record<string, string>;
+    home?: string;
+    version?: string | null;
+  },
 ): Promise<RunResult> {
   let stdout = "";
   let stderr = "";
@@ -25,6 +32,7 @@ export async function runCli(
     home: options.home ?? "/nonexistent/stubs-test-home",
     makeTransport: () => options.server.transport,
     readStdin: async () => options.stdin ?? "",
+    version: options.version,
   });
   return { code, stdout, stderr };
 }

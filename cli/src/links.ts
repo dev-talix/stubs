@@ -29,22 +29,35 @@ export type LinkReading =
   /** A v2 link: `locked` is `<ephemeralPub>.<wrapped>`, opened only with the right identity. */
   | { origin: string; locked: string };
 
+/**
+ * Characters a real link can contain. Anything else (quotes, `$`, `;`, spaces, `?`, `@`, `%`)
+ * means the text isn't a link the site made, and may be an attempt to break out of the quotes
+ * an agent wraps it in. Checked on the raw text so percent-encoding can't hide one.
+ */
+const LINK_CHARACTERS = /^[A-Za-z0-9_.\-:/#]+$/;
+
 export function parseLink(link: string, allowedOrigin: string): LinkReading | Failure {
+  const raw = link.trim();
+  const host = new URL(allowedOrigin).host;
+  // No scheme in the example: the output redactor would swallow anything that looks like a URL.
+  const notPlain = fail("invalid", `That isn't a plain Stubs link (${host}/t#…). Nothing was consumed.`);
+  if (!LINK_CHARACTERS.test(raw)) return notPlain;
+
   let url: URL;
   try {
-    url = new URL(link.trim());
+    url = new URL(raw);
   } catch {
     return fail("invalid", "That isn't a Stubs link. Nothing was consumed.");
   }
   if (url.origin !== allowedOrigin) {
     return fail(
       "invalid",
-      `The link isn't from ${new URL(allowedOrigin).host}. Pass --origin (or set STUBS_ORIGIN) if you trust it. Nothing was consumed.`,
+      `The link isn't from ${host}. Pass --origin (or set STUBS_ORIGIN) if you trust it. Nothing was consumed.`,
     );
   }
-  if (url.pathname !== "/t") {
-    return fail("invalid", "That isn't a Stubs link. Nothing was consumed.");
-  }
+  // The site redirects /t/ to /t, so both are the same link.
+  const plainPath = url.pathname === "/t" || url.pathname === "/t/";
+  if (url.search !== "" || url.username !== "" || url.password !== "" || !plainPath) return notPlain;
   const reading = parseTicketFragment(url.hash);
   switch (reading.kind) {
     case "ticket":

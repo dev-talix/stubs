@@ -7,16 +7,23 @@ in its context, its transcript, or its logs.
 
 ## Install
 
+**For agents, the easiest setup is the skill.** One command installs it for Claude Code and
+Codex; from then on, any stubs link you hand the agent gets pulled the safe way:
+
+```bash
+npx -y @talix/stubs@0.2.0 skill install
+```
+
 Run it without installing:
 
 ```bash
-npx -y @talix/stubs pull 'https://stubs.talix.app/t#v1.…'
+npx -y @talix/stubs@0.2.0 pull 'https://stubs.talix.app/t#v1.…'
 ```
 
 Or install it globally and use the `stubs` bin:
 
 ```bash
-npm i -g @talix/stubs
+npm i -g @talix/stubs@0.2.0
 stubs pull 'https://stubs.talix.app/t#v1.…'
 ```
 
@@ -138,6 +145,27 @@ There's no push tool. File paths resolve against the server's working directory,
 server reads `STUBS_ORIGIN` from its environment. Failures come back as tool results with
 `isError: true` and the error object below.
 
+### `stubs skill install`
+
+Installs the Stubs agent skill: a `SKILL.md` that tells the agent to pull stubs with this exact
+CLI version, how to read every exit code, and never to read `.env*` files. It goes to
+`~/.claude/skills/stubs/` and `~/.codex/skills/stubs/` (or `$CODEX_HOME/skills/stubs/`), for
+each of those tools you have installed.
+
+| Flag | What it does |
+|---|---|
+| `--target claude\|codex` | Install for one tool only (repeatable). Creates its folders if needed. |
+| `--force` | Replace a file at that path that isn't a stubs skill. |
+| `--json` | Print one JSON object instead of text. |
+
+Running it again is safe: it reports "already up to date", or upgrades an older stubs skill in
+place. It never touches any other file, and it won't write through a symlinked `stubs` folder or
+`SKILL.md` unless you pass `--force`. `stubs skill show` prints the skill instead, for agents
+that load instructions some other way.
+
+The skill pins the CLI version (`@talix/stubs@0.2.0`), so an agent only ever runs a version you
+installed on purpose. To move to a newer release, run `skill install` from that release.
+
 ## Exit codes
 
 | Code | Meaning | JSON `code` |
@@ -165,14 +193,15 @@ With `--json`, a failure prints `{"ok":false,"code":"void","message":"…"}`.
   `.gitignore`. If git can't answer but a `.git` directory is above the target, it refuses
   too. `--allow-tracked` overrides this. Outside a repo there's no check.
 - It only talks to `https://stubs.talix.app`. A link from any other origin exits `3` without a
-  network call, unless you pass `--origin` or set `STUBS_ORIGIN`.
+  network call, unless you pass `--origin` or set `STUBS_ORIGIN`. So does anything that isn't a
+  plain stub link: a query string, credentials, or a character a real link never contains.
 
 ## MCP setup
 
 Claude Code:
 
 ```bash
-claude mcp add stubs -- npx -y @talix/stubs mcp
+claude mcp add stubs -- npx -y @talix/stubs@0.2.0 mcp
 ```
 
 Cursor, in `.cursor/mcp.json`:
@@ -182,7 +211,7 @@ Cursor, in `.cursor/mcp.json`:
   "mcpServers": {
     "stubs": {
       "command": "npx",
-      "args": ["-y", "@talix/stubs", "mcp"]
+      "args": ["-y", "@talix/stubs@0.2.0", "mcp"]
     }
   }
 }
@@ -193,15 +222,15 @@ Codex, in `~/.codex/config.toml`:
 ```toml
 [mcp_servers.stubs]
 command = "npx"
-args = ["-y", "@talix/stubs", "mcp"]
+args = ["-y", "@talix/stubs@0.2.0", "mcp"]
 ```
 
-## For your AGENTS.md
+## For your AGENTS.md (if you don't use the skill)
 
 Add this to a project's `AGENTS.md` (or `CLAUDE.md`) so agents know what to do with a link:
 
 ```markdown
-When given a link on stubs.talix.app, run `npx -y @talix/stubs pull <link>` (or the
+When given a link on stubs.talix.app, run `npx -y @talix/stubs@0.2.0 pull <link>` (or the
 `pull_stub` tool). It writes the values into `.env.local` and prints only the key names.
 Never `cat`, read, or print `.env*` files.
 ```

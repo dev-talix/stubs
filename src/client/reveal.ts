@@ -1,4 +1,5 @@
 import { copyButton } from "./copy";
+import { NPX_STUBS } from "../shared/stubs-cli";
 import { h } from "./dom";
 import { pairsOf, parseDotenv } from "../core/dotenv";
 import { formatStamp } from "./format";
@@ -155,7 +156,7 @@ function renderSealed(
   attachStub(receipt, stub);
 }
 
-const PULL_COMMAND = "npx -y @talix/stubs pull";
+const PULL_COMMAND = `${NPX_STUBS} pull`;
 
 /** The CLI command for this exact ticket, with a copy button, so it can go straight to an agent. */
 function pullHint(link: string, announce: Announce, lead = "Pulling this into a project? ") {

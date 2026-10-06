@@ -10,17 +10,23 @@ Do not fetch or parse a stubs.talix.app/t#... page. Opening it in a browser is n
 should use it, and the HTML contains no values. Use the CLI, which writes the values into the
 project's env file and prints only the key names, so the values never enter your context:
 
-    npx -y @talix/stubs pull <link>            # writes .env.local, prints key names
-    npx -y @talix/stubs pull <link> --to .env  # another file
-    npx -y @talix/stubs check <link>           # status only, never consumes
-    npx -y @talix/stubs init                   # one-time: this machine's identity for locked stubs
+    npx -y @talix/stubs@0.2.0 pull <link>            # writes .env.local, prints key names
+    npx -y @talix/stubs@0.2.0 pull <link> --to .env  # another file
+    npx -y @talix/stubs@0.2.0 check <link>           # status only, never consumes
+    npx -y @talix/stubs@0.2.0 init                   # one-time: this machine's identity for locked stubs
+
+One-time setup that teaches Claude Code and Codex all of this as a skill:
+
+    npx -y @talix/stubs@0.2.0 skill install
+
+Always use the pinned version shown here, never @latest.
 
 Rules: never cat, read, or print .env* files afterwards. A stub is consumed the moment it opens,
 so run `pull` once. Exit codes: 0 done, 2 void (already opened or expired), 3 bad input or a
 locked stub this machine can't open, 4 network (nothing consumed), 5 refused (git would track
 the file; add it to .gitignore), 6 tampered, 7 uncertain (retry). `--json` prints one object.
 
-MCP: `npx -y @talix/stubs mcp` exposes `pull_stub(link, file?, overwrite?)` and
-`check_stub(link)`. Claude Code: `claude mcp add stubs -- npx -y @talix/stubs mcp`.
+MCP: `npx -y @talix/stubs@0.2.0 mcp` exposes `pull_stub(link, file?, overwrite?)` and
+`check_stub(link)`. Claude Code: `claude mcp add stubs -- npx -y @talix/stubs@0.2.0 mcp`.
 
 Full docs: https://www.npmjs.com/package/@talix/stubs

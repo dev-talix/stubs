@@ -237,6 +237,17 @@ describe("review probes", () => {
     }
   });
 
+  it("refuses a link with shell metacharacters before any request", async () => {
+    const link = await server.seed(STUB, ORIGIN);
+    const result = await pull(`${link}'$(touch pwned)'`, "--json");
+    expect(result.code).toBe(3);
+    expect(JSON.parse(result.stdout).message).toBe(
+      "That isn't a plain Stubs link (stubs.talix.app/t#…). Nothing was consumed.",
+    );
+    expect(server.sent).toEqual([]);
+    expect(server.store.size).toBe(1);
+  });
+
   it("pull <link> --to <link> doesn't echo the link", async () => {
     const link = await server.seed(STUB, ORIGIN);
     for (const flags of [[], ["--json"]]) {

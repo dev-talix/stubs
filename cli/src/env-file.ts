@@ -175,15 +175,17 @@ function spanOf(lines: Line[], pair: EnvPair): { start: number; end: number } {
 
 /**
  * Writes to a temp file beside the target, then renames over it. The result is 0600, or the
- * existing file's mode when that's already 0600 or stricter.
+ * existing file's mode when that's already 0600 or stricter, unless `fixedMode` says otherwise.
  */
-export async function writeFileAtomic(target: string, content: Buffer): Promise<void> {
-  let mode = 0o600;
-  try {
-    const existing = await stat(target);
-    if ((existing.mode & 0o077) === 0) mode = existing.mode & 0o777;
-  } catch (error) {
-    if (!isNotFound(error)) throw error;
+export async function writeFileAtomic(target: string, content: Buffer, fixedMode?: number): Promise<void> {
+  let mode = fixedMode ?? 0o600;
+  if (fixedMode === undefined) {
+    try {
+      const existing = await stat(target);
+      if ((existing.mode & 0o077) === 0) mode = existing.mode & 0o777;
+    } catch (error) {
+      if (!isNotFound(error)) throw error;
+    }
   }
 
   const temp = join(dirname(target), `.${basename(target)}.${randomBytes(6).toString("hex")}.tmp`);

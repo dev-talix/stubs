@@ -2,7 +2,8 @@
 // fragment ever reaches stdout or stderr (R6), on success and on every post-claim failure.
 
 import { execFile, spawn } from "node:child_process";
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -242,7 +243,7 @@ describe("stubs mcp over stdio", () => {
 describe("stubs binary", () => {
   it("prints usage for every command", async () => {
     const { stdout } = await exec(process.execPath, [BIN, "--help"]);
-    for (const command of ["stubs pull", "stubs check", "stubs push", "stubs init", "stubs id", "stubs mcp"]) {
+    for (const command of ["stubs pull", "stubs check", "stubs push", "stubs init", "stubs id", "stubs mcp", "stubs skill"]) {
       expect(stdout).toContain(command);
     }
   });
@@ -266,6 +267,21 @@ describe("stubs binary", () => {
       }
     }
     expect(server.store.size).toBe(1);
+  });
+
+  it("installs the skill under HOME without touching the real home", async () => {
+    const realSkill = join(homedir(), ".claude/skills/stubs/SKILL.md");
+    const before = await stat(realSkill).then((entry) => entry.mtimeMs, () => null);
+    const fakeHome = await tempDir();
+    const env: NodeJS.ProcessEnv = { ...process.env, HOME: fakeHome, USERPROFILE: fakeHome };
+    delete env.CODEX_HOME;
+    const { stdout } = await exec(process.execPath, [BIN, "skill", "install", "--target", "claude"], { cwd, env });
+    expect(stdout).toBe("Installed for Claude Code: ~/.claude/skills/stubs/SKILL.md\n");
+    const installed = await readFile(join(fakeHome, ".claude/skills/stubs/SKILL.md"), "utf8");
+    const { stdout: shown } = await exec(process.execPath, [BIN, "skill", "show"], { cwd, env });
+    expect(installed).toBe(shown);
+    expect(installed).toContain("npx -y @talix/stubs@0.2.0 pull");
+    expect(await stat(realSkill).then((entry) => entry.mtimeMs, () => null)).toBe(before);
   });
 
   it("exits 3 on an unknown flag", async () => {

@@ -12,8 +12,9 @@ import { startMcpServer } from "./mcp";
 import { pullStub, type PullSuccess } from "./pull";
 import { pushStub, type PushSuccess } from "./push";
 import { redact, redactDeep } from "./redact";
+import { installSkill, isSkillTarget, renderSkill, targetLabel, tildePath, type InstallSuccess } from "./skill";
 import { exitCodeFor, fail, isFailure, type Failure } from "./result";
-import { packageVersion } from "./version";
+import { packageVersion, readPackageVersion } from "./version";
 
 export interface Io {
   stdout: (text: string) => void;
@@ -23,6 +24,8 @@ export interface Io {
   home: string;
   makeTransport: (origin: string) => Transport;
   readStdin: () => Promise<string>;
+  /** Package version for the skill; undefined reads package.json, null simulates a failure. */
+  version?: string | null;
 }
 
 export const USAGE = `stubs: move one-time .env stubs into a project without printing the values.
@@ -50,6 +53,11 @@ Usage:
   stubs mcp
       Run an MCP server on stdio with the pull_stub and check_stub tools.
 
+  stubs skill show
+  stubs skill install [--target claude|codex] [--force] [--json]
+      Print or install the agent skill that teaches Claude Code and Codex to pull stubs safely.
+      Run \`stubs skill --help\` for details.
+
 Options:
   --origin <url>   Trust links from this origin (default stubs.talix.app over https, or STUBS_ORIGIN).
   --json           Print exactly one JSON object on stdout.
@@ -59,6 +67,21 @@ Options:
 Exit codes:
   0 done   2 void   3 bad input   4 network   5 refused (git guard)
   6 tampered   7 uncertain (retry tells which)   1 anything else
+`;
+
+export const SKILL_USAGE = `stubs skill: the agent skill for Claude Code and Codex.
+
+Usage:
+  stubs skill show
+      Print the skill (SKILL.md), pinned to this version of @talix/stubs.
+
+  stubs skill install [--target claude|codex] [--force] [--json]
+      Install it as skills/stubs/SKILL.md for each agent:
+        claude  ~/.claude/skills/stubs/SKILL.md
+        codex   $CODEX_HOME/skills/stubs/SKILL.md (default ~/.codex)
+      Without --target, installs for each agent whose home folder exists. Repeat --target for
+      both. An older stubs skill is updated in place; any other file at that path is left alone
+      (exit 5) unless --force.
 `;
 
 type Options = NonNullable<ParseArgsConfig["options"]>;
@@ -76,6 +99,12 @@ const COMMANDS: Record<string, Options> = {
   init: { json: COMMON.json!, help: COMMON.help!, force: { type: "boolean" } },
   id: { json: COMMON.json!, help: COMMON.help! },
   mcp: { help: COMMON.help! },
+  skill: {
+    json: COMMON.json!,
+    help: COMMON.help!,
+    force: { type: "boolean" },
+    target: { type: "string", multiple: true },
+  },
 };
 
 /** Flags a parse error may name back; anything else is "an unknown flag", since it could be a link. */
@@ -94,6 +123,8 @@ interface Output {
   json: (value: unknown) => void;
   /** Unredacted: only for a link or id the command was asked to produce. */
   deliberate: { stdout: (text: string) => void; stderr: (text: string) => void };
+  /** For showing paths under it as ~/... */
+  home: string;
 }
 
 function output(io: Io): Output {
@@ -103,6 +134,7 @@ function output(io: Io): Output {
     // Redact field by field so the serialized form stays valid JSON.
     json: (value) => io.stdout(`${JSON.stringify(redactDeep(value))}\n`),
     deliberate: { stdout: io.stdout, stderr: io.stderr },
+    home: io.home,
   };
 }
 
@@ -134,7 +166,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
     return report(fail("invalid", argumentError(error, command)), wantsJson, out);
   }
   if (values.help) {
-    out.stdout(USAGE);
+    out.stdout(command === "skill" ? SKILL_USAGE : USAGE);
     return 0;
   }
   const json = values.json === true;
@@ -154,6 +186,8 @@ export async function run(argv: string[], io: Io): Promise<number> {
     if (local === null) return report(fail("invalid", "No identity yet. Run `stubs init`."), json, out);
     return report(isFailure(local) ? local : { ok: true, publicId: local.publicId }, json, out);
   }
+
+  if (command === "skill") return runSkill(positionals, values, io, out);
 
   const origin = resolveOrigin(stringValue(values.origin), io.env.STUBS_ORIGIN);
   if (isFailure(origin)) return report(origin, json, out);
@@ -193,8 +227,45 @@ export async function run(argv: string[], io: Io): Promise<number> {
   return report(result, json, out);
 }
 
+async function runSkill(positionals: string[], values: Values, io: Io, out: Output): Promise<number> {
+  const [sub, ...extra] = positionals;
+  const json = values.json === true;
+  const version = io.version === undefined ? readPackageVersion() : io.version;
+  if (sub === "help" && extra.length === 0) {
+    out.stdout(SKILL_USAGE);
+    return 0;
+  }
+
+  if (sub === "show") {
+    if (extra.length > 0 || values.target !== undefined || values.force || json) {
+      return report(fail("invalid", "skill show takes no options. Run `stubs skill --help`."), json, out);
+    }
+    const rendered = renderSkill(version);
+    if (typeof rendered !== "string") return report(rendered, false, out);
+    // Deliberate: the skill is public text, and redaction would mangle its example link.
+    out.deliberate.stdout(rendered);
+    return 0;
+  }
+
+  if (sub === "install") {
+    if (extra.length > 0) return report(fail("invalid", "skill install takes no arguments."), json, out);
+    const requested = Array.isArray(values.target) ? values.target.map(String) : [];
+    const unknown = requested.find((target) => !isSkillTarget(target));
+    if (unknown !== undefined) {
+      return report(fail("invalid", "--target must be claude or codex. Run `stubs skill --help`."), json, out);
+    }
+    const result = await installSkill(
+      { targets: requested.filter(isSkillTarget), force: values.force === true },
+      { home: io.home, cwd: io.cwd, env: io.env, version },
+    );
+    return report(result, json, out);
+  }
+
+  return report(fail("invalid", "Unknown skill command. Run `stubs skill --help`."), json, out);
+}
+
 type IdSuccess = { ok: true; publicId: string };
-type Success = PullSuccess | CheckSuccess | PushSuccess | InitSuccess | IdSuccess;
+type Success = PullSuccess | CheckSuccess | PushSuccess | InitSuccess | IdSuccess | InstallSuccess;
 type CommandResult = Success | Failure;
 
 function report(result: CommandResult, json: boolean, out: Output): number {
@@ -213,6 +284,13 @@ export function exitCodeForResult(result: CommandResult): number {
 }
 
 function describe(result: Success, out: Output): void {
+  if ("installed" in result) {
+    const verbs = { installed: "Installed for", updated: "Updated for", unchanged: "Already up to date for" };
+    for (const item of result.installed) {
+      out.stdout(`${verbs[item.status]} ${targetLabel(item.target)}: ${tildePath(item.path, out.home)}\n`);
+    }
+    return;
+  }
   if ("publicId" in result) {
     out.deliberate.stdout(
       "created" in result

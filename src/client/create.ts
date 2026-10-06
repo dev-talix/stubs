@@ -11,6 +11,7 @@ import { h } from "./dom";
 import { formatKilobytes, formatStamp } from "./format";
 import { barcode, perforation, showReceipt, type Announce } from "./receipt";
 import { supportsLocking } from "../core/lock";
+import { NPX_STUBS } from "../shared/stubs-cli";
 import {
   DEFAULT_TTL_SECONDS,
   MAX_PLAINTEXT_BYTES,
@@ -35,7 +36,7 @@ const PLACEHOLDER = [
 ].join("\n");
 
 const LOCK_HINT =
-  "Paste the recipient's stubs id (they get it from `npx -y @talix/stubs id`). " +
+  `Paste the recipient's stubs id (they get it from \`${NPX_STUBS} id\`). ` +
   "A locked stub only opens on their machine, so the link is safe to leave in a chat.";
 
 const FAILURE_COPY: Record<FailureReason, string> = {
@@ -242,7 +243,7 @@ function renderTicket(
   const items = `${ticket.pairCount} ${ticket.pairCount === 1 ? "ITEM" : "ITEMS"}`;
   const facts = `${items} · VALID UNTIL ${formatStamp(ticket.expiresAt)}${ticket.locked ? " · LOCKED" : ""}`;
   const sendHint = ticket.locked
-    ? "Locked to one machine: only its owner can open it, with npx -y @talix/stubs pull. " +
+    ? `Locked to one machine: only its owner can open it, with ${NPX_STUBS} pull. ` +
       "The link alone can't open it, so it's safe to leave in a chat."
     : "Send this to one person. It opens once, then it's void. " +
       "Close this page and the link is gone for good, so copy it first.";

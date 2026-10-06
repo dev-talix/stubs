@@ -1,2 +1,4 @@
+# Everything may be fetched, including /t, so link previews (Slack, iMessage, X) can show the
+# stub card. /t pages carry noindex, and no page ever contains a key: it lives after the #.
 User-agent: *
-Disallow: /t
+Allow: /

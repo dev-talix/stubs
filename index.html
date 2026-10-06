@@ -4,12 +4,29 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="referrer" content="no-referrer" />
-    <meta name="robots" content="noindex" />
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#1c1b19" />
-    <meta name="description" content="Share .env values through a link that opens once. Encrypted in your browser." />
-    <title>Stubs · one-time .env tickets</title>
+    <!-- share:start (the build swaps this block for the stub version in t.html) -->
+    <title>Stubs · one-time .env links</title>
+    <meta name="description" content="Share .env values through a link that opens once. Encrypted in your browser; the key never reaches the server." />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Stubs" />
+    <meta property="og:url" content="https://stubs.talix.app/" />
+    <meta property="og:title" content="Stubs · one-time .env links" />
+    <meta property="og:description" content="Share .env values through a link that opens once. Encrypted in your browser; the key never reaches the server." />
+    <meta property="og:image" content="https://stubs.talix.app/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="A Stubs ticket reading ADMIT ONE, with three masked .env values" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Stubs · one-time .env links" />
+    <meta name="twitter:description" content="Share .env values through a link that opens once. Encrypted in your browser; the key never reaches the server." />
+    <meta name="twitter:image" content="https://stubs.talix.app/og.png" />
+    <!-- share:end -->
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
   </head>
   <body>
     <div class="desk">
@@ -26,7 +43,7 @@
               <p class="lede">Stubs encrypts in your browser, so it needs JavaScript to run.</p>
               <p class="fine">
                 Fetching this from a script or an agent? Don't parse this page. Run
-                <code>npx -y @talix/stubs pull &lt;this link&gt;</code> and it writes the values
+                <code>npx -y @talix/stubs@0.2.0 pull &lt;this link&gt;</code> and it writes the values
                 into .env.local, printing only the key names. Details: https://stubs.talix.app/llms.txt
               </p>
             </noscript>
@@ -49,23 +66,28 @@
             <code>.env.local</code>, and prints only the key names.
           </p>
           <div class="snippet">
-            <span class="snippet-label">Pull a stub</span>
-            <pre><code id="snippet-pull">npx -y @talix/stubs pull &lt;link&gt;</code></pre>
+            <span class="snippet-label">Easiest: install the skill for Claude Code and Codex</span>
+            <pre><code id="snippet-skill">npx -y @talix/stubs@0.2.0 skill install</code></pre>
+            <button type="button" class="copy" data-copy="snippet-skill">COPY</button>
+          </div>
+          <div class="snippet">
+            <span class="snippet-label">Or pull a stub yourself</span>
+            <pre><code id="snippet-pull">npx -y @talix/stubs@0.2.0 pull &lt;link&gt;</code></pre>
             <button type="button" class="copy" data-copy="snippet-pull">COPY</button>
           </div>
           <div class="snippet">
             <span class="snippet-label">MCP server for Claude Code</span>
-            <pre><code id="snippet-mcp">claude mcp add stubs -- npx -y @talix/stubs mcp</code></pre>
+            <pre><code id="snippet-mcp">claude mcp add stubs -- npx -y @talix/stubs@0.2.0 mcp</code></pre>
             <button type="button" class="copy" data-copy="snippet-mcp">COPY</button>
           </div>
           <div class="snippet">
             <span class="snippet-label">Add to your AGENTS.md or CLAUDE.md</span>
-            <pre><code id="snippet-agents">When given a link on stubs.talix.app, run `npx -y @talix/stubs pull &lt;link&gt;` (or the `pull_stub` tool). It writes the values into .env.local and prints only the key names. Never cat, read, or print .env* files.</code></pre>
+            <pre><code id="snippet-agents">When given a link on stubs.talix.app, run `npx -y @talix/stubs@0.2.0 pull &lt;link&gt;` (or the `pull_stub` tool). It writes the values into .env.local and prints only the key names. Never cat, read, or print .env* files.</code></pre>
             <button type="button" class="copy" data-copy="snippet-agents">COPY</button>
           </div>
           <p>
             Lock a stub to one machine and the link is safe to leave in a chat: the recipient runs
-            <code>npx -y @talix/stubs init</code> once and shares the id it prints. Commands, exit
+            <code>npx -y @talix/stubs@0.2.0 init</code> once and shares the id it prints. Commands, exit
             codes, and setup for Cursor and Codex:
             <a href="https://www.npmjs.com/package/@talix/stubs">npmjs.com/package/@talix/stubs</a>.
           </p>
