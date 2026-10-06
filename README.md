@@ -11,49 +11,74 @@ expiry, the server copy is deleted.
 
 ## How it stays private
 
-- The browser generates a random 256-bit key and puts it in the link after the `#`. Browsers
-  never send the fragment to a server.
-- HKDF-SHA256 derives two things from that key: the storage id and an AES-GCM-256 key. The
-  `.env` text is encrypted in the browser, with the id bound in as associated data.
-- The Worker only receives the id, ciphertext, IV, and TTL. It can't decrypt, and it doesn't log
-  any of them.
-- Each secret lives in its own Durable Object. Claiming reads and deletes it inside one input
-  gate, so two simultaneous opens can't both succeed. An alarm deletes it at expiry.
-- Opening a link only checks status. Revealing takes an explicit click (a POST), so chat link
-  previews and unfurlers can't burn a ticket.
+- The browser generates a random 256-bit key and puts it in the link after the `#`
+  (`/t#v1.<key>`). Browsers never send the fragment to a server.
+- HKDF-SHA256 derives three things from that key: the storage id, an AES-GCM-256 key, and a
+  claim secret. The `.env` text is encrypted in the browser, with the id bound in as associated
+  data.
+- The Worker receives the id, a SHA-256 hash of the claim secret, the ciphertext, IV, and TTL.
+  It can't decrypt, and it never logs any of them.
+- Checking or opening a ticket requires the claim secret, which only the link can derive. An id
+  (it appears in request logs) can't read, check, or burn a ticket: a wrong proof looks exactly
+  like a missing ticket and leaves the ticket untouched. The most an id reveals is that a ticket
+  with it was created and hasn't reached its expiry yet, because creating another ticket under
+  that id is refused. That refusal is also what guarantees every link is unique.
+- Links can't be guessed: each one carries a fresh 256-bit key from the browser's CSPRNG
+  (`crypto.getRandomValues`), and every guess has to go through the rate-limited server.
+- Each ticket lives in its own Durable Object. Claiming checks the proof, then reads and deletes
+  inside one input gate, so two simultaneous opens can't both succeed. A consumed id stays
+  blocked until its original expiry, and an alarm deletes everything at expiry.
+- Opening a link only checks status. Revealing takes an explicit click, so chat link previews and
+  unfurlers can't burn a ticket. Cross-site requests are refused, so another website can't make
+  a visitor's browser burn one either.
+- The page takes the key out of the address bar as soon as it loads. Once a ticket is opened or
+  found void, the tab forgets it: refreshing, going back, or reopening the tab lands on the
+  create page, and the opened page is blanked before the browser can cache it.
 - Strict CSP with no third-party origins. Fonts are self-hosted.
 
 ## Known limits
 
 - Burn-on-read is single-phase. If the claim response is lost in transit (connection drops at
   that exact moment), the secret is already gone and the recipient has to ask for a new link.
-  A grace window would fix that but weaken the one-time guarantee.
+  The page says so rather than guessing. A grace window would fix it but weaken the one-time
+  guarantee.
 - Until a ticket is torn, the full link sits wherever it was sent, and in the recipient's
-  browser history (the page strips the `#key` from the address bar on load, but Chrome's
-  history keeps the URL as first visited). Anyone with that link can open it first.
+  browser history (Chrome's history keeps the URL as first visited). Anyone with that link can
+  open it first.
+- An unopened ticket is kept in the tab's session storage so a refresh before tearing works.
+  Browsers can write session storage to disk for session restore. It's removed the moment the
+  ticket is opened or found void.
 - SQLite-backed Durable Objects keep 30 days of point-in-time recovery. Deleted ciphertext is
   recoverable by the Cloudflare account owner in that window, but it's useless without the key,
   which never leaves the browser.
-- Rate limits: 30 creates and 120 status/claim calls per IP per minute.
+- Rate limits: 30 creates and 120 status/claim calls per client per minute, per Cloudflare
+  location. IPv6 clients are counted per /64.
 
 ## Layout
 
 | Path | What |
 |---|---|
-| `src/shared/protocol.ts` | API contract and limits shared by client and Worker |
+| `src/shared/protocol.ts` | Wire contract: routes, payloads, runtime validation, error codes, format sizes |
 | `src/worker/` | Worker API (`/api/*`) and the `SecretBox` Durable Object |
-| `src/client/` | Vanilla TypeScript UI, crypto, `.env` parser |
+| `src/client/ticket.ts` | The Ticket module: issue, inspect, reveal. Owns keys and their order of use |
+| `src/client/ticket-session.ts` | Key custody in the recipient's tab |
+| `src/client/create-flow.ts` | Ticket creation as a state machine |
+| `src/client/` (rest) | Views, receipt screen, crypto, wire adapter, `.env` parser |
 | `public/_headers` | CSP and security headers for static assets |
-| `test/worker/` | API tests inside workerd (`@cloudflare/vitest-pool-workers`) |
-| `test/client/` | Crypto and parser unit tests |
+| `test/worker/` | API and end-to-end tests inside workerd (`@cloudflare/vitest-pool-workers`) |
+| `test/client/`, `test/shared/` | Client and contract tests |
 
 ## API
 
-| Method | Path | Result |
+Every route is a JSON `POST`.
+
+| Path | Body | Result |
 |---|---|---|
-| `POST` | `/api/secrets` | `{id, ciphertext, iv, ttlSeconds}` → `201 {expiresAt}` |
-| `GET` | `/api/secrets/:id` | `200 {expiresAt}` or `404`. Doesn't consume. |
-| `POST` | `/api/secrets/:id/claim` | `200 {ciphertext, iv}` once, then `404` |
+| `/api/tickets` | `{id, claimHash, ciphertext, iv, ttlSeconds}` | `201 {expiresAt}`, or `409` if the id is in use |
+| `/api/tickets/:id/status` | `{claimSecret}` | `200 {expiresAt}` or `404`. Doesn't consume. |
+| `/api/tickets/:id/claim` | `{claimSecret}` | `200 {ciphertext, iv}` once, then `404` |
+
+Errors are `{error: code}` with codes listed in `API_ERRORS` in `src/shared/protocol.ts`.
 
 ## Commands
 

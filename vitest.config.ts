@@ -9,7 +9,11 @@ export default defineConfig({
         test: { name: "worker", include: ["test/worker/**/*.test.ts"] },
       },
       {
-        test: { name: "client", environment: "node", include: ["test/client/**/*.test.ts"] },
+        test: {
+          name: "client",
+          environment: "node",
+          include: ["test/client/**/*.test.ts", "test/shared/**/*.test.ts"],
+        },
       },
     ],
   },

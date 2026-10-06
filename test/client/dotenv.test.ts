@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseDotenv } from "../../src/client/dotenv";
+import { pairsOf, parseDotenv } from "../../src/client/dotenv";
 
 const pairs = (source: string) =>
   parseDotenv(source).flatMap((line) => (line.kind === "pair" ? [[line.key, line.value]] : []));
@@ -59,4 +59,32 @@ describe("parseDotenv", () => {
       ["B", "2"],
     ]);
   });
+
+  it("stays fast on hostile input", () => {
+    const inputs = [
+      "A=x" + " ".repeat(32_000) + "y",
+      'A="' + "\nB=1".repeat(8_000),
+      'A="\n'.repeat(8_000),
+      'A="' + "\\".repeat(32_000),
+      // Far past the size limit: the parser runs on every keystroke before size is checked.
+      'A="' + "\nB=1".repeat(128_000),
+    ];
+    for (const input of inputs) {
+      const start = performance.now();
+      parseDotenv(input);
+      expect(performance.now() - start).toBeLessThan(250);
+    }
+  });
+
+  it("still parses lines after an unclosed quote of another kind", () => {
+    expect(pairs("A=\"open\nB='x'\nC='y'")).toEqual([
+      ["B", "x"],
+      ["C", "y"],
+    ]);
+  });
+
+  it("pairsOf keeps only pairs", () => {
+    expect(pairsOf(parseDotenv("A=1\nbad\nB=2")).map((p) => p.key)).toEqual(["A", "B"]);
+  });
 });
+

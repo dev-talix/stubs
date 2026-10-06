@@ -1,9 +1,24 @@
-import { createSecret, type ApiFailure } from "./api";
-import { deriveTicket, generateTicketKey, seal } from "./crypto";
-import { copyText, flashLabel, formatStamp, h } from "./dom";
-import { parseDotenv } from "./dotenv";
-import { barcode, feed, perforation, receiptHead, rule } from "./receipt";
-import { DEFAULT_TTL_SECONDS, MAX_PLAINTEXT_BYTES, TTL_OPTIONS } from "../shared/protocol";
+import { copyButton } from "./copy";
+import { CreateFlow, assessDraft, type CreateState, type FailureReason, type Issue } from "./create-flow";
+import { h } from "./dom";
+import { formatKilobytes, formatStamp } from "./format";
+import { barcode, perforation, showReceipt, type Announce } from "./receipt";
+import {
+  DEFAULT_TTL_SECONDS,
+  MAX_PLAINTEXT_BYTES,
+  TTL_SECONDS,
+  isTtlSeconds,
+  type TtlSeconds,
+} from "../shared/protocol";
+
+const LIMIT = formatKilobytes(MAX_PLAINTEXT_BYTES);
+
+const TTL_LABELS: Record<TtlSeconds, string> = {
+  300: "5 MIN",
+  3600: "1 HOUR",
+  86400: "1 DAY",
+  604800: "7 DAYS",
+};
 
 const PLACEHOLDER = [
   "DATABASE_URL=postgres://app:hunter2@db.internal:5432/app",
@@ -11,17 +26,15 @@ const PLACEHOLDER = [
   "# comments and blank lines are fine",
 ].join("\n");
 
-const FAILURE_COPY: Record<ApiFailure, string> = {
+const FAILURE_COPY: Record<FailureReason, string> = {
+  empty: "There's nothing to print yet.",
+  too_large: `Too long to print. The limit is ${LIMIT}.`,
   rate_limited: "The printer is jammed. Too many tickets from you in the last minute. Try again shortly.",
-  too_large: "Too long to print. The limit is 32 KB.",
   network: "Couldn't reach the printer. Check your connection and try again.",
-  not_found: "Something went wrong printing that ticket. Try again.",
   server: "Something went wrong printing that ticket. Try again.",
 };
 
-const byteLength = (text: string) => new TextEncoder().encode(text).length;
-
-export function renderCreate(receipt: HTMLElement, announce: (message: string) => void) {
+export function renderCreate(receipt: HTMLElement, announce: Announce, issue: Issue) {
   const input = h("textarea", {
     id: "env-input",
     class: "env-input",
@@ -37,188 +50,170 @@ export function renderCreate(receipt: HTMLElement, announce: (message: string) =
   const items = h("ol", { class: "items", "aria-label": "Items on this ticket" });
   const itemCount = h("span", {});
   const error = h("p", { class: "error", role: "alert" });
-  const print = h("button", { type: "submit", class: "print" }, "PRINT TICKET");
+  const print = h("button", { type: "button", class: "print" }, "PRINT TICKET");
 
   const ttl = h(
     "fieldset",
     { class: "ttl" },
     h("legend", {}, "VALID FOR"),
-    ...TTL_OPTIONS.map((option) =>
+    ...TTL_SECONDS.map((seconds) =>
       h(
         "label",
         { class: "ttl-option" },
         h("input", {
           type: "radio",
           name: "ttl",
-          value: String(option.seconds),
-          checked: option.seconds === DEFAULT_TTL_SECONDS,
+          value: String(seconds),
+          checked: seconds === DEFAULT_TTL_SECONDS,
         }),
         h("span", { class: "box", "aria-hidden": "true" }),
-        option.label.toUpperCase(),
+        TTL_LABELS[seconds],
       ),
     ),
   );
 
-  const form = h(
-    "form",
-    { class: "create", novalidate: true },
-    h(
-      "div",
-      { class: "field-head" },
-      h("label", { for: "env-input" }, "PASTE YOUR .ENV"),
-      size,
-    ),
+  const field = h(
+    "div",
+    { class: "create" },
+    h("div", { class: "field-head" }, h("label", { for: "env-input" }, "PASTE YOUR .ENV"), size),
     input,
-    rule(),
-    h("p", { class: "section-label" }, "ITEMS"),
-    items,
-    rule(),
-    ttl,
-    rule(),
-    h("p", { class: "totals" }, itemCount, h("span", {}, "OPENS ONCE")),
-    print,
-    error,
-    h(
-      "p",
-      { class: "fine" },
-      "Encrypted in this browser before it leaves. The key rides in the link after the #, " +
-        "which never reaches our server. We hold the ciphertext until it's opened or it expires.",
-    ),
   );
 
-  function refresh() {
-    const text = input.value;
-    const bytes = byteLength(text);
-    const lines = parseDotenv(text);
-    const pairs = lines.filter((line) => line.kind === "pair").length;
+  const flow = new CreateFlow(issue, (state) => render(state));
 
-    size.textContent = `${(bytes / 1024).toFixed(1)} / 32 KB`;
-    size.classList.toggle("over", bytes > MAX_PLAINTEXT_BYTES);
-    itemCount.textContent = `ITEMS ${pairs}`;
+  function render(state: CreateState) {
+    if (state.kind === "printed") {
+      renderTicket(receipt, announce, state, () => {
+        flow.reset();
+        renderCreate(receipt, announce, issue);
+      });
+      return;
+    }
+    const draft = assessDraft(input.value);
+    const printing = state.kind === "printing";
 
+    size.textContent = `${formatKilobytes(draft.bytes)} / ${LIMIT}`;
+    size.classList.toggle("over", draft.overLimit);
+    itemCount.textContent = `ITEMS ${draft.pairCount}`;
     items.replaceChildren(
-      ...(lines.length === 0
+      ...(draft.lines.length === 0
         ? [h("li", { class: "empty" }, "Nothing to print yet.")]
-        : lines.map((line) =>
-            line.kind === "pair"
-              ? h(
-                  "li",
-                  { class: "item" },
-                  h("span", { class: "key" }, line.key),
-                  h("span", { class: "leader", "aria-hidden": "true" }),
-                  h("span", { class: "mask" }, line.value === "" ? "EMPTY" : "••••••••"),
-                )
-              : h(
-                  "li",
-                  { class: "item invalid" },
-                  h("span", { class: "key" }, `LINE ${line.line}`),
-                  h("span", { class: "leader", "aria-hidden": "true" }),
-                  h("span", { class: "mask" }, "CAN'T READ"),
-                ),
+        : draft.lines.map((line) =>
+            h(
+              "li",
+              { class: line.kind === "pair" ? "item" : "item invalid" },
+              h("span", { class: "key" }, line.kind === "pair" ? line.key : `LINE ${line.line}`),
+              h("span", { class: "leader", "aria-hidden": "true" }),
+              h(
+                "span",
+                { class: "mask" },
+                line.kind === "invalid" ? "CAN'T READ" : line.value === "" ? "EMPTY" : "••••••••",
+              ),
+            ),
           )),
     );
-    print.disabled = text.trim() === "" || bytes > MAX_PLAINTEXT_BYTES;
+
+    // While printing, the text is frozen: what's on screen is what gets printed.
+    input.readOnly = printing;
+    print.disabled = !flow.canSubmit(input.value);
+    print.textContent = printing ? "PRINTING…" : "PRINT TICKET";
+    error.textContent = state.kind === "failed" ? FAILURE_COPY[state.reason] : "";
   }
 
   input.addEventListener("input", () => {
-    error.textContent = "";
-    refresh();
+    flow.edited();
+    render(flow.state);
   });
 
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    if (print.disabled) return;
-    const text = input.value;
-    const ttlSeconds = Number(new FormData(form).get("ttl") ?? DEFAULT_TTL_SECONDS);
-
-    print.disabled = true;
-    print.textContent = "PRINTING…";
-    error.textContent = "";
-
-    const key = generateTicketKey();
-    let result: Awaited<ReturnType<typeof createSecret>>;
-    try {
-      const ticket = await deriveTicket(key);
-      const sealed = await seal(text, ticket);
-      result = await createSecret({ id: ticket.id, ...sealed, ttlSeconds });
-    } catch {
-      result = { ok: false, failure: "server" };
-    }
-
-    if (!result.ok) {
-      print.textContent = "PRINT TICKET";
-      print.disabled = false;
-      error.textContent = FAILURE_COPY[result.failure];
-      return;
-    }
-
-    const link = `${location.origin}/t#${key}`;
-    const count = parseDotenv(text).filter((line) => line.kind === "pair").length;
-    renderTicket(receipt, link, count, result.data.expiresAt, announce);
+  print.addEventListener("click", () => {
+    const choice = Number(ttl.querySelector<HTMLInputElement>("input[name=ttl]:checked")?.value);
+    void flow.submit(input.value, isTtlSeconds(choice) ? choice : DEFAULT_TTL_SECONDS);
   });
 
-  refresh();
-  receipt.replaceChildren(receiptHead("ENV TICKET"), rule(), form);
+  showReceipt(
+    receipt,
+    {
+      sections: [
+        [field],
+        [h("p", { class: "section-label" }, "ITEMS"), items],
+        [ttl],
+        [
+          h("p", { class: "totals" }, itemCount, h("span", {}, "OPENS ONCE")),
+          print,
+          error,
+          h(
+            "p",
+            { class: "fine" },
+            "Encrypted in this browser before it leaves. The key rides in the link after the #, " +
+              "which never reaches our server. We hold the ciphertext until it's opened or it expires.",
+          ),
+        ],
+      ],
+      feed: true,
+    },
+    announce,
+  );
+  render(flow.state);
 }
 
 function renderTicket(
   receipt: HTMLElement,
-  link: string,
-  count: number,
-  expiresAt: number,
-  announce: (message: string) => void,
+  announce: Announce,
+  ticket: Extract<CreateState, { kind: "printed" }>,
+  printAnother: () => void,
 ) {
   const linkField = h("input", {
     class: "link",
     type: "text",
     readonly: true,
-    value: link,
+    value: ticket.link,
     "aria-label": "One-time link",
     spellcheck: "false",
   });
   linkField.addEventListener("focus", () => linkField.select());
 
-  const copy = h("button", { type: "button", class: "print" }, "COPY LINK");
-  copy.addEventListener("click", async () => {
-    if (await copyText(link)) {
-      flashLabel(copy, "COPIED");
-      announce("Link copied.");
-    } else {
+  const copy = copyButton({
+    label: "COPY LINK",
+    className: "print",
+    text: () => ticket.link,
+    announce,
+    copiedMessage: "Link copied.",
+    onRefused: () => {
       linkField.focus();
       announce("Couldn't copy automatically. The link is selected; copy it by hand.");
-    }
+    },
   });
 
   const another = h("button", { type: "button", class: "text-button" }, "PRINT ANOTHER");
-  another.addEventListener("click", () => {
-    renderCreate(receipt, announce);
-    feed(receipt);
-    receipt.querySelector<HTMLTextAreaElement>("textarea")?.focus();
-  });
+  another.addEventListener("click", printAnother);
 
-  receipt.replaceChildren(
-    receiptHead("ENV TICKET"),
-    rule(),
-    h("p", { class: "admit" }, "ADMIT ONE"),
-    h(
-      "p",
-      { class: "ticket-facts" },
-      `${count} ${count === 1 ? "ITEM" : "ITEMS"} · VALID UNTIL ${formatStamp(expiresAt)}`,
-    ),
-    rule(),
-    linkField,
-    copy,
-    h(
-      "p",
-      { class: "fine" },
-      "Send this to one person. It opens once, then it's void. " +
-        "Close this page and the link is gone for good, so copy it first.",
-    ),
-    perforation("KEEP THIS STUB"),
-    barcode(),
-    another,
+  const items = `${ticket.pairCount} ${ticket.pairCount === 1 ? "ITEM" : "ITEMS"}`;
+  showReceipt(
+    receipt,
+    {
+      sections: [
+        [
+          h("p", { class: "admit" }, "ADMIT ONE"),
+          h("p", { class: "ticket-facts" }, `${items} · VALID UNTIL ${formatStamp(ticket.expiresAt)}`),
+        ],
+        [
+          linkField,
+          copy,
+          h(
+            "p",
+            { class: "fine" },
+            "Send this to one person. It opens once, then it's void. " +
+              "Close this page and the link is gone for good, so copy it first.",
+          ),
+          perforation("KEEP THIS STUB"),
+          barcode(),
+          another,
+        ],
+      ],
+      feed: true,
+      message: "Ticket printed. Copy the link and send it.",
+      focus: copy,
+    },
+    announce,
   );
-  feed(receipt);
-  announce("Ticket printed. Copy the link and send it.");
-  copy.focus();
 }

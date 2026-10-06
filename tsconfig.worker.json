@@ -8,5 +8,13 @@
     "lib": ["ES2023"],
     "types": ["./worker-configuration.d.ts", "@cloudflare/vitest-pool-workers/types"]
   },
-  "include": ["src/worker", "src/shared", "test/worker"]
+  "include": [
+    "src/worker",
+    "src/shared",
+    "test/worker",
+    // The Ticket module and what it imports run in both runtimes; the e2e test needs them here.
+    "src/client/ticket.ts",
+    "src/client/api.ts",
+    "src/client/crypto.ts"
+  ]
 }

@@ -1,88 +1,80 @@
-import { claimSecret, secretStatus } from "./api";
-import { TICKET_KEY_PATTERN, deriveTicket, open, type Ticket } from "./crypto";
-import { copyText, flashLabel, formatStamp, h, setChildren } from "./dom";
-import { parseDotenv } from "./dotenv";
+import { copyButton } from "./copy";
+import { h } from "./dom";
+import { pairsOf, parseDotenv } from "./dotenv";
+import { formatStamp } from "./format";
+import { attachStub, perforation, showReceipt, tearStub, type Announce } from "./receipt";
 import {
-  attachStub,
-  detachStub,
-  feed,
-  perforation,
-  receiptHead,
-  rule,
-  tearStub,
-  voidStamp,
-} from "./receipt";
+  inspectTicket,
+  revealTicket,
+  type FragmentReading,
+  type TicketCapability,
+  type Transport,
+} from "./ticket";
 
-type Announce = (message: string) => void;
-
-const KEY_STORAGE = "snapkey:ticket";
-
-/**
- * Moves the key out of the address bar, so it doesn't sit in browser history as a live link,
- * into storage scoped to this tab, so a refresh before tearing still works.
- */
-function takeTicketKey(): string {
-  const fromLink = location.hash.slice(1);
-  try {
-    if (fromLink) sessionStorage.setItem(KEY_STORAGE, fromLink);
-    history.replaceState(null, "", "/t");
-    return sessionStorage.getItem(KEY_STORAGE) ?? fromLink;
-  } catch {
-    return fromLink;
-  }
+export interface RevealContext {
+  transport: Transport;
+  announce: Announce;
+  /** The ticket is used up or unusable: forget it so this tab can't come back to it. */
+  finish: () => void;
 }
 
-function forgetTicketKey() {
-  try {
-    sessionStorage.removeItem(KEY_STORAGE);
-  } catch {
-    // Storage unavailable: nothing was kept.
-  }
-}
-
-export async function renderReveal(receipt: HTMLElement, announce: Announce, key = takeTicketKey()) {
-  if (!TICKET_KEY_PATTERN.test(key)) {
-    forgetTicketKey();
-    renderMessage(receipt, {
-      title: "NO TICKET",
+export async function renderReveal(
+  receipt: HTMLElement,
+  reading: Exclude<FragmentReading, { kind: "missing" }>,
+  context: RevealContext,
+) {
+  if (reading.kind === "malformed") {
+    context.finish();
+    return renderMessage(receipt, context, {
+      title: "INCOMPLETE LINK",
       body:
-        "There's no key to open. If you already tore this ticket, it's gone. Otherwise the link " +
-        "was cut short: everything after the # is the key, so ask the sender for the whole link.",
+        "Everything after the # in the link is the key, and it's cut short here. " +
+        "Ask the sender to paste the whole link again.",
     });
-    return;
+  }
+  if (reading.kind === "unsupported_version") {
+    context.finish();
+    return renderMessage(receipt, context, {
+      title: "CAN'T READ THIS",
+      body: "This ticket was printed in a format this page doesn't know. Ask the sender for a new one.",
+    });
   }
 
-  receipt.replaceChildren(
-    receiptHead("ENV TICKET"),
-    rule(),
-    h("p", { class: "checking", role: "status" }, "CHECKING TICKET…"),
+  showReceipt(
+    receipt,
+    { sections: [[h("p", { class: "checking", role: "status" }, "CHECKING TICKET…")]] },
+    context.announce,
   );
 
-  let ticket: Ticket;
-  try {
-    ticket = await deriveTicket(key);
-  } catch {
-    renderMessage(receipt, {
-      title: "CAN'T OPEN HERE",
-      body: "This browser can't run the decryption this link needs. Try a current version of Chrome, Firefox, or Safari.",
-    });
-    return;
+  const outcome = await inspectTicket(reading.capability, context.transport);
+  switch (outcome.kind) {
+    case "sealed":
+      return renderSealed(receipt, reading.capability, outcome.expiresAt, context);
+    case "void":
+      return renderVoid(receipt, context);
+    case "unsupported_browser":
+      return renderMessage(receipt, context, {
+        title: "CAN'T OPEN HERE",
+        body: "This browser can't run the decryption this link needs. Try a current Chrome, Firefox, or Safari.",
+      });
+    case "failed":
+      return renderMessage(receipt, context, {
+        title: outcome.reason === "rate_limited" ? "SLOW DOWN" : "NO CONNECTION",
+        body:
+          outcome.reason === "rate_limited"
+            ? "Too many checks from your network in the last minute. Nothing has been used. Wait a moment and try again."
+            : "Couldn't reach the server to check this ticket. Nothing has been used. Try again.",
+        retry: () => renderReveal(receipt, reading, context),
+      });
   }
-
-  const status = await secretStatus(ticket.id);
-  if (!status.ok) {
-    if (status.failure === "not_found") return renderVoid(receipt, announce);
-    return renderMessage(receipt, {
-      title: "NO CONNECTION",
-      body: "Couldn't reach the server to check this ticket. Nothing has been used. Try again.",
-      retry: () => renderReveal(receipt, announce, key),
-    });
-  }
-
-  renderSealed(receipt, ticket, status.data.expiresAt, announce);
 }
 
-function renderSealed(receipt: HTMLElement, ticket: Ticket, expiresAt: number, announce: Announce) {
+function renderSealed(
+  receipt: HTMLElement,
+  capability: TicketCapability,
+  expiresAt: number,
+  context: RevealContext,
+) {
   const tear = h("button", { type: "button", class: "print" }, "TEAR TO REVEAL");
   const error = h("p", { class: "error", role: "alert" });
   const stub = h(
@@ -104,158 +96,177 @@ function renderSealed(receipt: HTMLElement, ticket: Ticket, expiresAt: number, a
     tear.textContent = "TEARING…";
     error.textContent = "";
 
-    const claim = await claimSecret(ticket.id);
-    if (!claim.ok) {
-      if (claim.failure === "not_found") return renderVoid(receipt, announce);
-      tear.disabled = false;
-      tear.textContent = "TEAR TO REVEAL";
-      error.textContent =
-        "Couldn't reach the server. If the ticket did open, trying again will show it as void.";
-      return;
+    const outcome = await revealTicket(capability, context.transport);
+    switch (outcome.kind) {
+      case "opened":
+        context.finish();
+        await tearStub(receipt, stub);
+        return renderOpened(receipt, outcome.plaintext, context);
+      case "void":
+        return renderVoid(receipt, context);
+      case "tampered":
+        context.finish();
+        return renderMessage(receipt, context, {
+          title: "WON'T DECRYPT",
+          body:
+            "The ticket opened but its contents didn't match this link, so it may have been altered. " +
+            "It's void now. Ask the sender for a new one.",
+          stamped: true,
+        });
+      case "failed":
+      case "uncertain":
+        tear.disabled = false;
+        tear.textContent = "TEAR TO REVEAL";
+        error.textContent =
+          outcome.kind === "uncertain"
+            ? "The connection dropped mid-tear. Try again: if it did open, it'll show as void."
+            : outcome.reason === "rate_limited"
+              ? "Too many tries from your network in the last minute. Nothing was used. Wait a moment, then tear again."
+              : "Something went wrong on our side. Nothing was used. Try again.";
+        return;
     }
-
-    forgetTicketKey();
-    let plaintext: string;
-    try {
-      plaintext = await open(claim.data, ticket);
-    } catch {
-      return renderMessage(receipt, {
-        title: "WON'T DECRYPT",
-        body:
-          "The ticket opened but its contents didn't match this link, so it may have been altered. " +
-          "It's void now. Ask the sender for a new one.",
-        stamped: true,
-      });
-    }
-
-    await tearStub(receipt, stub);
-    renderOpened(receipt, plaintext, announce);
   });
 
-  receipt.replaceChildren(
-    receiptHead("ENV TICKET"),
-    rule(),
-    h("p", { class: "admit" }, "ADMIT ONE"),
-    h("p", { class: "ticket-facts" }, `VALID UNTIL ${formatStamp(expiresAt)}`),
-    h(
-      "p",
-      { class: "lede" },
-      "Someone sent you environment variables. They're encrypted, and only this link can open them.",
-    ),
+  showReceipt(
+    receipt,
+    {
+      sections: [
+        [
+          h("p", { class: "admit" }, "ADMIT ONE"),
+          h("p", { class: "ticket-facts" }, `VALID UNTIL ${formatStamp(expiresAt)}`),
+          h(
+            "p",
+            { class: "lede" },
+            "Someone sent you environment variables. They're encrypted, and only this link can open them.",
+          ),
+        ],
+      ],
+      message: "Ticket found. It can be opened once.",
+    },
+    context.announce,
   );
   attachStub(receipt, stub);
-  announce("Ticket found. It can be opened once.");
 }
 
-function renderOpened(receipt: HTMLElement, plaintext: string, announce: Announce) {
-  detachStub(receipt);
-  window.addEventListener("beforeunload", (event) => event.preventDefault());
+function renderOpened(receipt: HTMLElement, plaintext: string, context: RevealContext) {
+  const { announce } = context;
+  // Ask before leaving the only copy, but only while this page is live: once it's hidden the
+  // user has already left, and a restored copy must be able to redirect without a prompt.
+  const leaving = new AbortController();
+  window.addEventListener("beforeunload", (event) => event.preventDefault(), { signal: leaving.signal });
+  window.addEventListener("pagehide", () => leaving.abort(), { once: true });
 
   const lines = parseDotenv(plaintext);
-  const pairs = lines.filter((line) => line.kind === "pair");
+  const pairs = pairsOf(lines);
   const unreadable = lines.length - pairs.length;
 
   const list = h(
     "ol",
     { class: "secrets", "aria-label": "Environment variables" },
-    ...pairs.map((pair) => {
-      const copy = h(
-        "button",
-        { type: "button", class: "copy", "aria-label": `Copy value of ${pair.key}` },
-        "COPY",
-      );
-      copy.addEventListener("click", async () => {
-        if (await copyText(pair.value)) {
-          flashLabel(copy, "COPIED");
-          announce(`${pair.key} copied.`);
-        }
-      });
-      return h(
+    ...pairs.map((pair) =>
+      h(
         "li",
         { class: "secret" },
-        h("div", { class: "secret-head" }, h("span", { class: "key" }, pair.key), copy),
+        h(
+          "div",
+          { class: "secret-head" },
+          h("span", { class: "key" }, pair.key),
+          copyButton({
+            label: "COPY",
+            className: "copy",
+            ariaLabel: `Copy value of ${pair.key}`,
+            text: () => pair.value,
+            announce,
+            copiedMessage: `${pair.key} copied.`,
+          }),
+        ),
         h("code", { class: "value" }, pair.value === "" ? "(empty)" : pair.value),
-      );
-    }),
+      ),
+    ),
   );
 
-  const copyAll = h("button", { type: "button", class: "print" }, "COPY ALL AS .ENV");
-  copyAll.addEventListener("click", async () => {
-    if (await copyText(plaintext)) {
-      flashLabel(copyAll, "COPIED");
-      announce("All values copied in .env format.");
-    }
+  const copyAll = copyButton({
+    label: "COPY ALL AS .ENV",
+    className: "print",
+    text: () => plaintext,
+    announce,
+    copiedMessage: "All values copied in .env format.",
   });
 
   const download = h("button", { type: "button", class: "text-button" }, "DOWNLOAD .ENV");
   download.addEventListener("click", () => {
     const url = URL.createObjectURL(new Blob([plaintext], { type: "text/plain" }));
-    const anchor = h("a", { href: url, download: ".env" });
-    anchor.click();
+    h("a", { href: url, download: ".env" }).click();
     setTimeout(() => URL.revokeObjectURL(url), 0);
   });
 
-  setChildren(
+  showReceipt(
     receipt,
-    receiptHead("ENV TICKET", voidStamp()),
-    rule(),
-    h("p", { class: "ticket-facts" }, `OPENED ${formatStamp(Date.now())}`),
-    h(
-      "p",
-      { class: "lede" },
-      "This page is the only copy left. The server deleted its copy when you opened it.",
-    ),
-    rule(),
-    h("div", { class: "unroll" }, pairs.length > 0 ? list : h("pre", { class: "raw" }, plaintext)),
-    unreadable > 0 &&
-      h(
-        "p",
-        { class: "fine" },
-        `${unreadable} ${unreadable === 1 ? "line wasn't" : "lines weren't"} KEY=VALUE. ` +
-          "Copy all includes them exactly as sent.",
-      ),
-    rule(),
-    copyAll,
-    download,
+    {
+      stamped: true,
+      sections: [
+        [
+          h("p", { class: "ticket-facts" }, `OPENED ${formatStamp(Date.now())}`),
+          h(
+            "p",
+            { class: "lede" },
+            "This page is the only copy left. The server deleted its copy when you opened it, " +
+              "and this page won't come back once you leave it.",
+          ),
+        ],
+        [
+          h("div", { class: "unroll" }, pairs.length > 0 ? list : h("pre", { class: "raw" }, plaintext)),
+          unreadable > 0 &&
+            h(
+              "p",
+              { class: "fine" },
+              `${unreadable} ${unreadable === 1 ? "line wasn't" : "lines weren't"} KEY=VALUE. ` +
+                "Copy all includes them exactly as sent.",
+            ),
+        ],
+        [copyAll, download],
+      ],
+      message: `Ticket opened. ${pairs.length} values ready to copy. The link is now void.`,
+      focus: copyAll,
+    },
+    announce,
   );
-  announce(`Ticket opened. ${pairs.length} values ready to copy. The link is now void.`);
-  copyAll.focus();
 }
 
-function renderVoid(receipt: HTMLElement, announce: Announce) {
-  forgetTicketKey();
-  renderMessage(receipt, {
+function renderVoid(receipt: HTMLElement, context: RevealContext) {
+  context.finish();
+  renderMessage(receipt, context, {
     title: "NOTHING HERE",
     body:
       "This ticket was already opened, or it expired. Either way it's gone for good. " +
       "Ask whoever sent it for a new one.",
     stamped: true,
+    message: "This ticket is void.",
   });
-  announce("This ticket is void.");
 }
 
 function renderMessage(
   receipt: HTMLElement,
-  message: { title: string; body: string; stamped?: boolean; retry?: () => void },
+  context: RevealContext,
+  message: { title: string; body: string; stamped?: boolean; retry?: () => void; message?: string },
 ) {
-  const retry =
-    message.retry &&
-    h("button", { type: "button", class: "print" }, "TRY AGAIN");
-  if (retry && message.retry) retry.addEventListener("click", message.retry);
+  let retry: HTMLButtonElement | undefined;
+  if (message.retry) {
+    retry = h("button", { type: "button", class: "print" }, "TRY AGAIN");
+    retry.addEventListener("click", message.retry);
+  }
 
-  const home = h("a", { class: "text-button", href: "/" }, "PRINT YOUR OWN");
-
-  detachStub(receipt);
-
-  setChildren(
+  showReceipt(
     receipt,
-    receiptHead("ENV TICKET", message.stamped ? voidStamp() : undefined),
-    rule(),
-    h("p", { class: "admit" }, message.title),
-    h("p", { class: "lede" }, message.body),
-    rule(),
-    retry,
-    home,
+    {
+      stamped: message.stamped,
+      sections: [
+        [h("p", { class: "admit" }, message.title), h("p", { class: "lede" }, message.body)],
+        [retry, h("a", { class: "text-button", href: "/" }, "PRINT YOUR OWN")],
+      ],
+      feed: true,
+      message: message.message ?? `${message.title}. ${message.body}`,
+    },
+    context.announce,
   );
-  feed(receipt);
 }
