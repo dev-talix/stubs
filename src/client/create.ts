@@ -36,14 +36,14 @@ const PLACEHOLDER = [
 ].join("\n");
 
 const LOCK_HINT =
-  `Paste the recipient's stubs id (they get it from \`${NPX_STUBS} id\`). ` +
-  "A locked stub only opens on their machine, so the link is safe to leave in a chat.";
+  `Their stubs id, from \`${NPX_STUBS} id\`. ` +
+  "A locked stub opens only on their machine, so the link is safe to share anywhere.";
 
 const FAILURE_COPY: Record<FailureReason, string> = {
   empty: "There's nothing to print yet.",
   too_large: `Too long to print. The limit is ${LIMIT}.`,
-  bad_recipient: "That stubs id can't receive a locked stub. Ask the recipient to run `stubs id` again and paste exactly what it prints.",
-  rate_limited: "The printer is jammed. Too many tickets from you in the last minute. Try again shortly.",
+  bad_recipient: "That stubs id can't receive a locked stub. Ask the recipient to run `stubs id` again.",
+  rate_limited: "Printer jammed: too many tickets in the last minute. Try again shortly.",
   network: "Couldn't reach the printer. Check your connection and try again.",
   server: "Something went wrong printing that ticket. Try again.",
 };
@@ -160,7 +160,7 @@ export function renderCreate(receipt: HTMLElement, announce: Announce, issue: Is
 
     const badRecipient = !isAcceptableRecipient(recipient());
     lock.classList.toggle("invalid", badRecipient);
-    lockHint.textContent = badRecipient ? "That's not a stubs id. It looks like stubs1 followed by 43 characters." : LOCK_HINT;
+    lockHint.textContent = badRecipient ? "Not a stubs id. It starts with stubs1 and is 49 characters long." : LOCK_HINT;
 
     // While printing, the text is frozen: what's on screen is what gets printed.
     input.readOnly = printing;
@@ -197,8 +197,7 @@ export function renderCreate(receipt: HTMLElement, announce: Announce, issue: Is
           h(
             "p",
             { class: "fine" },
-            "Encrypted in this browser before it leaves. The key rides in the link after the #, " +
-              "which never reaches our server. We hold the ciphertext until it's opened or it expires.",
+            "Encrypted in your browser. The key travels in the link, after the #, and never reaches our server.",
           ),
         ],
       ],
@@ -243,10 +242,9 @@ function renderTicket(
   const items = `${ticket.pairCount} ${ticket.pairCount === 1 ? "ITEM" : "ITEMS"}`;
   const facts = `${items} · VALID UNTIL ${formatStamp(ticket.expiresAt)}${ticket.locked ? " · LOCKED" : ""}`;
   const sendHint = ticket.locked
-    ? `Locked to one machine: only its owner can open it, with ${NPX_STUBS} pull. ` +
-      "The link alone can't open it, so it's safe to leave in a chat."
-    : "Send this to one person. It opens once, then it's void. " +
-      "Close this page and the link is gone for good, so copy it first.";
+    ? `Locked: only the recipient's machine can open it, with ${NPX_STUBS} pull. ` +
+      "The link alone is harmless, so share it anywhere."
+    : "Opens once, then it's void. Copy it now; it's gone when you leave this page.";
   showReceipt(
     receipt,
     {

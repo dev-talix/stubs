@@ -30,9 +30,7 @@ export async function renderReveal(
     context.finish();
     return renderMessage(receipt, context, {
       title: "INCOMPLETE LINK",
-      body:
-        "Everything after the # in the link is the key, and it's cut short here. " +
-        "Ask the sender to paste the whole link again.",
+      body: "The key after the # is cut short. Ask the sender for the whole link.",
     });
   }
   if (reading.kind === "locked") {
@@ -43,7 +41,7 @@ export async function renderReveal(
     context.finish();
     return renderMessage(receipt, context, {
       title: "CAN'T READ THIS",
-      body: "This ticket was printed in a format this page doesn't know. Ask the sender for a new one.",
+      body: "This stub uses a format this page doesn't know. Ask the sender for a new one.",
     });
   }
 
@@ -62,15 +60,15 @@ export async function renderReveal(
     case "unsupported_browser":
       return renderMessage(receipt, context, {
         title: "CAN'T OPEN HERE",
-        body: "This browser can't run the decryption this link needs. Try a current Chrome, Firefox, or Safari.",
+        body: "This browser can't decrypt it. Try a current Chrome, Firefox, or Safari.",
       });
     case "failed":
       return renderMessage(receipt, context, {
         title: outcome.reason === "rate_limited" ? "SLOW DOWN" : "NO CONNECTION",
         body:
           outcome.reason === "rate_limited"
-            ? "Too many checks from your network in the last minute. Nothing has been used. Wait a moment and try again."
-            : "Couldn't reach the server to check this ticket. Nothing has been used. Try again.",
+            ? "Too many tries from your network. Nothing was used. Wait a minute and try again."
+            : "Couldn't reach the server. Nothing was used. Try again.",
         retry: () => renderReveal(receipt, reading, context),
       });
   }
@@ -91,8 +89,7 @@ function renderSealed(
     h(
       "p",
       { class: "fine" },
-      "It opens once. Tearing it voids the link for everyone, including you, " +
-        "so be ready to copy what's inside.",
+      "It opens once. Tearing it voids the link, so be ready to copy what's inside.",
     ),
     pullHint(ticketLink(location.origin, capability), context.announce),
     tear,
@@ -116,9 +113,7 @@ function renderSealed(
         context.finish();
         return renderMessage(receipt, context, {
           title: "WON'T DECRYPT",
-          body:
-            "The ticket opened but its contents didn't match this link, so it may have been altered. " +
-            "It's void now. Ask the sender for a new one.",
+          body: "It opened, but the contents don't match this link. It's void now. Ask the sender for a new one.",
           stamped: true,
         });
       case "failed":
@@ -127,9 +122,9 @@ function renderSealed(
         tear.textContent = "TEAR TO REVEAL";
         error.textContent =
           outcome.kind === "uncertain"
-            ? "The connection dropped mid-tear. Try again: if it did open, it'll show as void."
+            ? "The connection dropped mid-tear. Try again; if it did open, it'll show as void."
             : outcome.reason === "rate_limited"
-              ? "Too many tries from your network in the last minute. Nothing was used. Wait a moment, then tear again."
+              ? "Too many tries from your network. Nothing was used. Wait a minute, then tear again."
               : "Something went wrong on our side. Nothing was used. Try again.";
         return;
     }
@@ -145,7 +140,7 @@ function renderSealed(
           h(
             "p",
             { class: "lede" },
-            "Someone sent you environment variables. They're encrypted, and only this link can open them.",
+            "Someone sent you .env values. Only this link can open them.",
           ),
         ],
       ],
@@ -159,7 +154,7 @@ function renderSealed(
 const PULL_COMMAND = `${NPX_STUBS} pull`;
 
 /** The CLI command for this exact ticket, with a copy button, so it can go straight to an agent. */
-function pullHint(link: string, announce: Announce, lead = "Pulling this into a project? ") {
+function pullHint(link: string, announce: Announce, lead = "Pulling it into a project? ") {
   const command = `${PULL_COMMAND} ${link}`;
   // The page already took the key out of the address bar; don't put it back on screen.
   const shown = `${PULL_COMMAND} <this link>`;
@@ -180,7 +175,6 @@ function pullHint(link: string, announce: Announce, lead = "Pulling this into a 
         copiedMessage: "Command copied.",
       }),
     ),
-    " writes it straight to .env.local.",
   );
 }
 
@@ -246,8 +240,7 @@ function renderOpened(receipt: HTMLElement, plaintext: string, context: RevealCo
           h(
             "p",
             { class: "lede" },
-            "This page is the only copy left. The server deleted its copy when you opened it, " +
-              "and this page won't come back once you leave it.",
+            "This is the only copy. The server deleted its own, and this page won't come back once you leave.",
           ),
         ],
         [
@@ -262,9 +255,9 @@ function renderOpened(receipt: HTMLElement, plaintext: string, context: RevealCo
           h(
             "p",
             { class: "fine" },
-            "Next time, skip the copy-paste: ",
+            "Next time, skip the copying: ",
             h("code", {}, `${PULL_COMMAND} <link>`),
-            " writes a stub straight to .env.local.",
+            ".",
           ),
         ],
         [copyAll, download],
@@ -286,8 +279,7 @@ function renderLocked(receipt: HTMLElement, link: string, context: RevealContext
           h(
             "p",
             { class: "lede" },
-            "This stub is locked to one machine. A browser can't open it, and the link alone " +
-              "can't either. On that machine, run:",
+            "Locked to one machine. A browser can't open it. On that machine, run:",
           ),
           pullHint(link, context.announce, ""),
         ],
@@ -305,8 +297,7 @@ function renderVoid(receipt: HTMLElement, context: RevealContext) {
   renderMessage(receipt, context, {
     title: "NOTHING HERE",
     body:
-      "This ticket was already opened, or it expired. Either way it's gone for good. " +
-      "Ask whoever sent it for a new one.",
+      "Already opened, or expired. Either way it's gone. Ask the sender for a new one.",
     stamped: true,
     message: "This ticket is void.",
   });

@@ -32,7 +32,7 @@
     <div class="desk">
       <header class="desk-bar">
         <a class="wordmark" href="/">stubs</a>
-        <span>one-time .env tickets</span>
+        <span>one-time .env links</span>
       </header>
 
       <main class="machine">
@@ -42,9 +42,9 @@
             <noscript>
               <p class="lede">Stubs encrypts in your browser, so it needs JavaScript to run.</p>
               <p class="fine">
-                Fetching this from a script or an agent? Don't parse this page. Run
-                <code>npx -y @talix/stubs@0.2.0 pull &lt;this link&gt;</code> and it writes the values
-                into .env.local, printing only the key names. Details: https://stubs.talix.app/llms.txt
+                Script or agent? Don't parse this page. Run
+                <code>npx -y @talix/stubs@0.2.0 pull &lt;this link&gt;</code> to write the values into
+                .env.local; it prints only the key names. Details: https://stubs.talix.app/llms.txt
               </p>
             </noscript>
           </article>
@@ -53,7 +53,7 @@
 
       <footer class="desk-foot">
         <ol class="how">
-          <li><span>01</span> Paste a .env. It's encrypted right here, in your browser.</li>
+          <li><span>01</span> Paste a .env. It's encrypted in your browser.</li>
           <li><span>02</span> The key goes in the link, after the #. Our server never sees it.</li>
           <li><span>03</span> The first person to open the link gets the values. Then it's void.</li>
         </ol>
@@ -61,17 +61,17 @@
         <section class="agents" aria-labelledby="agents-title">
           <h2 id="agents-title" class="agents-title">FOR AGENTS AND SCRIPTS</h2>
           <p>
-            Hand a stub to Claude Code, Cursor, or Codex and it can pull the values straight into a
-            project without ever seeing them. <code>@talix/stubs</code> on npm opens the link, writes
-            <code>.env.local</code>, and prints only the key names.
+            Claude Code, Cursor, and Codex can pull a stub into a project without ever seeing the
+            values. <code>@talix/stubs</code> opens the link, writes <code>.env.local</code>, and
+            prints only the key names.
           </p>
           <div class="snippet">
-            <span class="snippet-label">Easiest: install the skill for Claude Code and Codex</span>
+            <span class="snippet-label">Install the skill (Claude Code, Codex)</span>
             <pre><code id="snippet-skill">npx -y @talix/stubs@0.2.0 skill install</code></pre>
             <button type="button" class="copy" data-copy="snippet-skill">COPY</button>
           </div>
           <div class="snippet">
-            <span class="snippet-label">Or pull a stub yourself</span>
+            <span class="snippet-label">Pull a stub</span>
             <pre><code id="snippet-pull">npx -y @talix/stubs@0.2.0 pull &lt;link&gt;</code></pre>
             <button type="button" class="copy" data-copy="snippet-pull">COPY</button>
           </div>
@@ -81,14 +81,13 @@
             <button type="button" class="copy" data-copy="snippet-mcp">COPY</button>
           </div>
           <div class="snippet">
-            <span class="snippet-label">Add to your AGENTS.md or CLAUDE.md</span>
+            <span class="snippet-label">Or add to AGENTS.md</span>
             <pre><code id="snippet-agents">When given a link on stubs.talix.app, run `npx -y @talix/stubs@0.2.0 pull &lt;link&gt;` (or the `pull_stub` tool). It writes the values into .env.local and prints only the key names. Never cat, read, or print .env* files.</code></pre>
             <button type="button" class="copy" data-copy="snippet-agents">COPY</button>
           </div>
           <p>
-            Lock a stub to one machine and the link is safe to leave in a chat: the recipient runs
-            <code>npx -y @talix/stubs@0.2.0 init</code> once and shares the id it prints. Commands, exit
-            codes, and setup for Cursor and Codex:
+            To lock a stub to one machine, the recipient runs
+            <code>npx -y @talix/stubs@0.2.0 init</code> once and shares the id it prints. Full docs:
             <a href="https://www.npmjs.com/package/@talix/stubs">npmjs.com/package/@talix/stubs</a>.
           </p>
         </section>
