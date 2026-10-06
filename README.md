@@ -38,6 +38,19 @@ expiry, the server copy is deleted.
   edge injects into pages (such as Cloudflare's Web Analytics beacon), which could otherwise
   read the URL while the key is still in it.
 
+## Analytics
+
+Two events go to PostHog: a page was viewed (`/` or `/t`, path only) and a stub was generated
+(with its expiry). Nothing typed or pasted is read, there's no session replay or click capture,
+and visitors with Global Privacy Control or Do Not Track send nothing.
+
+- The browser posts to this app's own `/api/events`, never to PostHog, so the CSP stays
+  same-origin.
+- The Worker checks each event against the allowlist in `src/shared/analytics.ts`, rebuilds it,
+  and adds the PostHog project key, which lives only as a Worker secret
+  (`wrangler secret put POSTHOG_KEY`). Without the secret, events are accepted and dropped.
+- Each page load gets a random id held in memory: no cookies, no storage, no person profiles.
+
 ## Known limits
 
 - Burn-on-read is single-phase. If the claim response is lost in transit (connection drops at

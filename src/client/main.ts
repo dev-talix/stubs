@@ -1,5 +1,6 @@
 import "@fontsource/fragment-mono/400.css";
 import "./styles.css";
+import { track } from "./analytics";
 import { renderCreate } from "./create";
 import { renderReveal } from "./reveal";
 import { issueTicket, type Transport } from "./ticket";
@@ -19,7 +20,12 @@ const transport: Transport = (path, init) => fetch(path, init);
 
 function showCreatePage() {
   if (location.pathname !== "/") history.replaceState(null, "", "/");
-  renderCreate(receipt!, announce, (text, ttl) => issueTicket(text, ttl, transport, location.origin));
+  track({ event: "page_viewed", properties: { path: "/" } });
+  renderCreate(receipt!, announce, async (text, ttl) => {
+    const outcome = await issueTicket(text, ttl, transport, location.origin);
+    if (outcome.kind === "issued") track({ event: "stub_generated", properties: { ttl_seconds: ttl } });
+    return outcome;
+  });
 }
 
 if (location.pathname.replace(/\/+$/, "") === "/t") {
@@ -29,6 +35,8 @@ if (location.pathname.replace(/\/+$/, "") === "/t") {
     location.replace("/");
   } else {
     document.title = "A stub for you · Stubs";
+    // Captured above, so the key is already out of the address bar. Only the path is sent.
+    track({ event: "page_viewed", properties: { path: "/t" } });
     let finished = false;
 
     // A used ticket must not come back. Blank the page before the browser snapshots it for

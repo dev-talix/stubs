@@ -1,4 +1,4 @@
-import { env, reset, runDurableObjectAlarm } from "cloudflare:test";
+import { createExecutionContext, env, reset, runDurableObjectAlarm } from "cloudflare:test";
 import { exports } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -277,7 +277,7 @@ describe("request validation", () => {
         },
         body: stream,
       });
-      await expectError(await handler.fetch(request, env), "too_large");
+      await expectError(await handler.fetch(request, env, createExecutionContext()), "too_large");
       expect(pulls).toBe(0);
       expect(cancelled).toBe(false);
       await stream.cancel();
@@ -302,7 +302,7 @@ describe("request validation", () => {
         headers: { "Content-Type": "application/json", "CF-Connecting-IP": clientIp },
         body: stream,
       });
-      await expectError(await handler.fetch(request, env), "too_large");
+      await expectError(await handler.fetch(request, env, createExecutionContext()), "too_large");
       expect(sent).toBe(5);
       expect(cancelled).toBe(true);
     },
@@ -363,7 +363,7 @@ describe("cross-site and abuse guards", () => {
       headers: { "Content-Type": "application/json", "CF-Connecting-IP": clientIp },
       body: stream,
     });
-    await expectError(await handler.fetch(request, env), "rate_limited");
+    await expectError(await handler.fetch(request, env, createExecutionContext()), "rate_limited");
     expect(pulls).toBe(0);
     await stream.cancel();
     expect((await api(ROUTES.status(VALID_ID), { claimSecret: CLAIM_SECRET })).status).toBe(200);
@@ -420,7 +420,7 @@ describe("cross-site and abuse guards", () => {
         method: "POST",
         headers: { "Content-Type": "application/json", "CF-Connecting-IP": clientIp },
         body: stream,
-      }), env), "rate_limited");
+      }), env, createExecutionContext()), "rate_limited");
       expect(pulls).toBe(0);
       await stream.cancel();
     }
@@ -443,7 +443,7 @@ describe("response contract", () => {
       method: "POST",
       headers: { "Content-Type": "application/json", "CF-Connecting-IP": clientIp },
       body: stream,
-    }), env);
+    }), env, createExecutionContext());
     await expectError(response, "internal");
     expect(log.mock.calls).toEqual([["ticket_api_error", "TypeError"]]);
   });

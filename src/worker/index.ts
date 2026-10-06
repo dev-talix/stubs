@@ -12,15 +12,18 @@ import {
   type SealedTicket,
   type TicketStatus,
 } from "../shared/protocol";
+import { EVENTS_ROUTE, parseAnalyticsBatch } from "../shared/analytics";
+import { forwardToPostHog } from "./analytics";
 import { SecretBox } from "./secret-box";
 
 export { SecretBox };
 
 type JsonBody = ApiError | CreateTicketResponse | SealedTicket | TicketStatus;
 type BodyResult = { ok: true; value: unknown } | { ok: false; error: ApiErrorCode };
+type RouteContext = { env: Env; ctx: ExecutionContext; id: string; origin: string };
 type Route = {
-  limiter: "CREATE_LIMITER" | "READ_LIMITER";
-  handle: (body: unknown, env: Env, id: string) => Promise<Response>;
+  limiter: "CREATE_LIMITER" | "READ_LIMITER" | "EVENTS_LIMITER";
+  handle: (body: unknown, route: RouteContext) => Promise<Response>;
 };
 
 const JSON_HEADERS = {
@@ -30,22 +33,23 @@ const JSON_HEADERS = {
   "Referrer-Policy": "no-referrer",
 };
 
-const ROUTE_TABLE: Record<"create" | "status" | "claim", Route> = {
-  create: { limiter: "CREATE_LIMITER", handle: createTicket },
+const ROUTE_TABLE: Record<"create" | "status" | "claim" | "events", Route> = {
+  create: { limiter: "CREATE_LIMITER", handle: (body, { env }) => createTicket(body, env) },
   status: {
     limiter: "READ_LIMITER",
-    handle: (body, env, id) => readTicket(body, env, id, "status"),
+    handle: (body, { env, id }) => readTicket(body, env, id, "status"),
   },
   claim: {
     limiter: "READ_LIMITER",
-    handle: (body, env, id) => readTicket(body, env, id, "claim"),
+    handle: (body, { env, id }) => readTicket(body, env, id, "claim"),
   },
+  events: { limiter: "EVENTS_LIMITER", handle: recordEvents },
 };
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     try {
-      return await handleRequest(request, env);
+      return await handleRequest(request, env, ctx);
     } catch (error) {
       console.error("ticket_api_error", error instanceof Error ? error.name : "Error");
       return apiError("internal");
@@ -53,7 +57,7 @@ export default {
   },
 };
 
-async function handleRequest(request: Request, env: Env): Promise<Response> {
+async function handleRequest(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const url = new URL(request.url);
   const site = request.headers.get("Sec-Fetch-Site");
   const origin = request.headers.get("Origin");
@@ -65,8 +69,9 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
   }
 
   const match = url.pathname.match(TICKET_ROUTE_PATTERN);
-  const action = url.pathname === ROUTES.create ? "create" : match?.[2];
-  if (action !== "create" && action !== "status" && action !== "claim") {
+  const action =
+    url.pathname === ROUTES.create ? "create" : url.pathname === EVENTS_ROUTE ? "events" : match?.[2];
+  if (action !== "create" && action !== "status" && action !== "claim" && action !== "events") {
     return apiError("not_found");
   }
   if (request.method !== "POST") return apiError("method_not_allowed", { Allow: "POST" });
@@ -76,7 +81,17 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
   if (!(await env[route.limiter].limit({ key })).success) return apiError("rate_limited");
   const body = await readJsonBody(request);
   if (!body.ok) return apiError(body.error);
-  return route.handle(body.value, env, match?.[1] ?? "");
+  return route.handle(body.value, { env, ctx, id: match?.[1] ?? "", origin: url.origin });
+}
+
+/** Accepts allowlisted analytics and forwards them in the background. Off-schema is a 400. */
+async function recordEvents(body: unknown, { env, ctx, origin }: RouteContext): Promise<Response> {
+  const batch = parseAnalyticsBatch(body);
+  if (!batch) return apiError("invalid_request");
+  // POSTHOG_KEY is a Worker secret, so it isn't in the generated Env type.
+  const key = (env as Env & { POSTHOG_KEY?: string }).POSTHOG_KEY;
+  forwardToPostHog(batch, { host: env.POSTHOG_HOST, key }, origin, ctx);
+  return new Response(null, { status: 204, headers: JSON_HEADERS });
 }
 
 async function createTicket(body: unknown, env: Env): Promise<Response> {

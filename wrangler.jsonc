@@ -22,8 +22,16 @@
       "name": "READ_LIMITER",
       "namespace_id": "4202",
       "simple": { "limit": 120, "period": 60 }
+    },
+    {
+      "name": "EVENTS_LIMITER",
+      "namespace_id": "4203",
+      "simple": { "limit": 60, "period": 60 }
     }
   ],
+  // Analytics go to PostHog through /api/events. The project key is a secret:
+  //   wrangler secret put POSTHOG_KEY
+  "vars": { "POSTHOG_HOST": "https://us.i.posthog.com" },
   "routes": [{ "pattern": "stubs.talix.app", "custom_domain": true }],
   "workers_dev": false,
   "preview_urls": false
