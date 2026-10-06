@@ -6,7 +6,7 @@ import {
   seal,
   toBase64Url,
   unseal,
-} from "../../src/client/crypto";
+} from "../../src/core/crypto";
 import { PATTERNS } from "../../src/shared/protocol";
 
 const ENV = 'DATABASE_URL=postgres://u:p@h/db\nNOTE="multi\nline ✓"\n';

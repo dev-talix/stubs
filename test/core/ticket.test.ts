@@ -7,7 +7,8 @@ import {
   ticketLink,
   type TicketCapability,
   type Transport,
-} from "../../src/client/ticket";
+} from "../../src/core/ticket";
+import { generateIdentity, unlockTicketKey } from "../../src/core/lock";
 import { MAX_PLAINTEXT_BYTES } from "../../src/shared/protocol";
 
 const KEY = "k".repeat(43);
@@ -22,7 +23,10 @@ describe("parseTicketFragment", () => {
     [`#v1.${KEY}x`, "malformed"],
     [`#${KEY}`, "malformed"],
     [`#v1.${KEY.slice(0, 42)}+`, "malformed"],
-    [`#v2.${KEY}`, "unsupported_version"],
+    [`#v2.${"e".repeat(43)}.${"w".repeat(80)}`, "locked"],
+    [`#v2.${"e".repeat(43)}.${"w".repeat(79)}`, "malformed"],
+    [`#v2.${KEY}`, "malformed"],
+    [`#v3.${KEY}`, "unsupported_version"],
   ])("reads %j as %s", (fragment, kind) => {
     expect(parseTicketFragment(fragment).kind).toBe(kind);
   });
@@ -108,6 +112,39 @@ describe("ticket lifecycle", () => {
     const record = [...server.store.values()][0]!;
     record.ciphertext = (record.ciphertext[0] === "A" ? "B" : "A") + record.ciphertext.slice(1);
     expect(await revealTicket(reading.capability, server.transport)).toEqual({ kind: "tampered" });
+  });
+
+  it("locks a stub to a recipient, who alone can unwrap and open it", async () => {
+    const server = fakeServer();
+    const recipient = await generateIdentity();
+    const issued = await issueTicket(text, 3600, server.transport, "https://x.test", { lockTo: recipient.publicId });
+    if (issued.kind !== "issued") throw new Error(issued.reason);
+
+    const url = new URL(issued.link);
+    expect(url.hash.startsWith("#v2.")).toBe(true);
+    const body = url.hash.slice("#v2.".length);
+    expect(await unlockTicketKey(body, await generateIdentity())).toBeNull();
+    const key = await unlockTicketKey(body, recipient);
+    expect(key).not.toBeNull();
+    expect(await revealTicket(key as TicketCapability, server.transport)).toEqual({ kind: "opened", plaintext: text });
+    expect(server.sent.join("\n")).not.toContain(key);
+  });
+
+  it("reports a degenerate recipient id without creating anything", async () => {
+    const server = fakeServer();
+    // All-zero X25519 point: passes the pattern, but no shared secret can be derived from it.
+    const zeroPoint = "stubs1" + "A".repeat(43);
+    expect(await issueTicket(text, 3600, server.transport, "x", { lockTo: zeroPoint })).toEqual({
+      kind: "failed",
+      reason: "bad_recipient",
+    });
+    expect(server.sent).toHaveLength(0);
+  });
+
+  it("refuses an unvalidated recipient id before doing anything", async () => {
+    const server = fakeServer();
+    await expect(issueTicket(text, 3600, server.transport, "x", { lockTo: "stubs1nope" })).rejects.toThrow();
+    expect(server.sent).toHaveLength(0);
   });
 
   it("draws a new key if the server says the id is taken", async () => {

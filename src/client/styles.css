@@ -260,6 +260,38 @@ body {
   color: #8b8679;
 }
 
+.lock-input {
+  display: block;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid #d3ccbd;
+  border-radius: 0;
+  color: var(--ink);
+  background: var(--paper-recess);
+  font: 13px / 1.4 var(--mono);
+}
+
+.lock-input::placeholder {
+  color: #8b8679;
+}
+
+.lock-input:disabled {
+  color: var(--ink-soft);
+  background: transparent;
+}
+
+.lock.invalid .lock-input {
+  border-color: var(--stamp);
+}
+
+.lock.invalid .fine {
+  color: var(--stamp);
+}
+
+.lock .fine {
+  margin-top: 10px !important;
+}
+
 /* ---------- Item lines with dot leaders ---------- */
 
 .items {
@@ -449,6 +481,27 @@ body {
   color: var(--ink-soft);
   font-size: var(--small);
   line-height: 1.6;
+}
+
+.fine code {
+  color: var(--ink);
+}
+
+/* A copyable shell command on its own line inside fine print. */
+.command {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 6px 0;
+}
+
+.command code {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  background: var(--paper-recess);
+  font: var(--small) / 1.5 var(--mono);
+  overflow-wrap: anywhere;
 }
 
 /* ---------- Ticket ---------- */

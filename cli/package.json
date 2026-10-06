@@ -1,0 +1,51 @@
+{
+  "name": "@talix/stubs",
+  "version": "0.1.0",
+  "description": "Pull one-time .env stubs from stubs.talix.app into a project without ever printing the values.",
+  "keywords": [
+    "env",
+    "dotenv",
+    "secrets",
+    "one-time",
+    "burn-after-reading",
+    "mcp",
+    "cli",
+    "agents",
+    "stubs"
+  ],
+  "license": "MIT",
+  "author": "Nikhil Kapadia",
+  "homepage": "https://stubs.talix.app",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NikAtNight/stubs.git",
+    "directory": "cli"
+  },
+  "type": "module",
+  "bin": {
+    "stubs": "dist/stubs.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --platform=node --format=esm --target=node20 --packages=external --outfile=dist/stubs.js --banner:js='#!/usr/bin/env node' && chmod +x dist/stubs.js",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}

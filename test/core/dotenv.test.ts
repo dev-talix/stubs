@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pairsOf, parseDotenv } from "../../src/client/dotenv";
+import { pairsOf, parseDotenv } from "../../src/core/dotenv";
 
 const pairs = (source: string) =>
   parseDotenv(source).flatMap((line) => (line.kind === "pair" ? [[line.key, line.value]] : []));

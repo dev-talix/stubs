@@ -12,9 +12,7 @@
     "src/worker",
     "src/shared",
     "test/worker",
-    // The Ticket module and what it imports run in both runtimes; the e2e test needs them here.
-    "src/client/ticket.ts",
-    "src/client/api.ts",
-    "src/client/crypto.ts"
+    // The core modules run in every runtime; the e2e test needs them here.
+    "src/core"
   ]
 }

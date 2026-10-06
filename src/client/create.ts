@@ -1,8 +1,16 @@
 import { copyButton } from "./copy";
-import { CreateFlow, assessDraft, type CreateState, type FailureReason, type Issue } from "./create-flow";
+import {
+  CreateFlow,
+  assessDraft,
+  isAcceptableRecipient,
+  type CreateState,
+  type FailureReason,
+  type Issue,
+} from "./create-flow";
 import { h } from "./dom";
 import { formatKilobytes, formatStamp } from "./format";
 import { barcode, perforation, showReceipt, type Announce } from "./receipt";
+import { supportsLocking } from "../core/lock";
 import {
   DEFAULT_TTL_SECONDS,
   MAX_PLAINTEXT_BYTES,
@@ -26,9 +34,14 @@ const PLACEHOLDER = [
   "# comments and blank lines are fine",
 ].join("\n");
 
+const LOCK_HINT =
+  "Paste the recipient's stubs id (they get it from `npx -y @talix/stubs id`). " +
+  "A locked stub only opens on their machine, so the link is safe to leave in a chat.";
+
 const FAILURE_COPY: Record<FailureReason, string> = {
   empty: "There's nothing to print yet.",
   too_large: `Too long to print. The limit is ${LIMIT}.`,
+  bad_recipient: "That stubs id can't receive a locked stub. Ask the recipient to run `stubs id` again and paste exactly what it prints.",
   rate_limited: "The printer is jammed. Too many tickets from you in the last minute. Try again shortly.",
   network: "Couldn't reach the printer. Check your connection and try again.",
   server: "Something went wrong printing that ticket. Try again.",
@@ -79,6 +92,37 @@ export function renderCreate(receipt: HTMLElement, announce: Announce, issue: Is
     input,
   );
 
+  // Optional: lock the stub to one machine. Its owner runs `stubs id` and sends the result.
+  const lockInput = h("input", {
+    id: "lock-input",
+    class: "lock-input",
+    type: "text",
+    placeholder: "stubs1…",
+    spellcheck: "false",
+    autocomplete: "off",
+    autocapitalize: "off",
+    "aria-describedby": "lock-hint",
+  });
+  const lockHint = h("p", { id: "lock-hint", class: "fine" }, LOCK_HINT);
+  const lock = h(
+    "div",
+    { class: "create lock" },
+    h(
+      "div",
+      { class: "field-head" },
+      h("label", { for: "lock-input" }, "LOCK TO A RECIPIENT"),
+      h("span", { class: "size" }, "OPTIONAL"),
+    ),
+    lockInput,
+    lockHint,
+  );
+  const recipient = () => lockInput.value.trim();
+  void supportsLocking().then((supported) => {
+    if (supported) return;
+    lockInput.disabled = true;
+    lockHint.textContent = "This browser can't lock stubs. Use a current Chrome, Firefox, or Safari.";
+  });
+
   const flow = new CreateFlow(issue, (state) => render(state));
 
   function render(state: CreateState) {
@@ -113,21 +157,28 @@ export function renderCreate(receipt: HTMLElement, announce: Announce, issue: Is
           )),
     );
 
+    const badRecipient = !isAcceptableRecipient(recipient());
+    lock.classList.toggle("invalid", badRecipient);
+    lockHint.textContent = badRecipient ? "That's not a stubs id. It looks like stubs1 followed by 43 characters." : LOCK_HINT;
+
     // While printing, the text is frozen: what's on screen is what gets printed.
     input.readOnly = printing;
-    print.disabled = !flow.canSubmit(input.value);
+    lockInput.readOnly = printing;
+    print.disabled = !flow.canSubmit(input.value, recipient());
     print.textContent = printing ? "PRINTING…" : "PRINT TICKET";
     error.textContent = state.kind === "failed" ? FAILURE_COPY[state.reason] : "";
   }
 
-  input.addEventListener("input", () => {
-    flow.edited();
-    render(flow.state);
-  });
+  for (const control of [input, lockInput]) {
+    control.addEventListener("input", () => {
+      flow.edited();
+      render(flow.state);
+    });
+  }
 
   print.addEventListener("click", () => {
     const choice = Number(ttl.querySelector<HTMLInputElement>("input[name=ttl]:checked")?.value);
-    void flow.submit(input.value, isTtlSeconds(choice) ? choice : DEFAULT_TTL_SECONDS);
+    void flow.submit(input.value, isTtlSeconds(choice) ? choice : DEFAULT_TTL_SECONDS, recipient());
   });
 
   showReceipt(
@@ -137,6 +188,7 @@ export function renderCreate(receipt: HTMLElement, announce: Announce, issue: Is
         [field],
         [h("p", { class: "section-label" }, "ITEMS"), items],
         [ttl],
+        [lock],
         [
           h("p", { class: "totals" }, itemCount, h("span", {}, "OPENS ONCE")),
           print,
@@ -188,23 +240,24 @@ function renderTicket(
   another.addEventListener("click", printAnother);
 
   const items = `${ticket.pairCount} ${ticket.pairCount === 1 ? "ITEM" : "ITEMS"}`;
+  const facts = `${items} · VALID UNTIL ${formatStamp(ticket.expiresAt)}${ticket.locked ? " · LOCKED" : ""}`;
+  const sendHint = ticket.locked
+    ? "Locked to one machine: only its owner can open it, with npx -y @talix/stubs pull. " +
+      "The link alone can't open it, so it's safe to leave in a chat."
+    : "Send this to one person. It opens once, then it's void. " +
+      "Close this page and the link is gone for good, so copy it first.";
   showReceipt(
     receipt,
     {
       sections: [
         [
           h("p", { class: "admit" }, "ADMIT ONE"),
-          h("p", { class: "ticket-facts" }, `${items} · VALID UNTIL ${formatStamp(ticket.expiresAt)}`),
+          h("p", { class: "ticket-facts" }, facts),
         ],
         [
           linkField,
           copy,
-          h(
-            "p",
-            { class: "fine" },
-            "Send this to one person. It opens once, then it's void. " +
-              "Close this page and the link is gone for good, so copy it first.",
-          ),
+          h("p", { class: "fine" }, sendHint),
           perforation("KEEP THIS STUB"),
           barcode(),
           another,

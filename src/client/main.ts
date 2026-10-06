@@ -3,7 +3,7 @@ import "./styles.css";
 import { track } from "./analytics";
 import { renderCreate } from "./create";
 import { renderReveal } from "./reveal";
-import { issueTicket, type Transport } from "./ticket";
+import { issueTicket, type Transport } from "../core/ticket";
 import { captureTicket, forgetTicket } from "./ticket-session";
 
 const receipt = document.querySelector<HTMLElement>("#receipt");
@@ -21,8 +21,8 @@ const transport: Transport = (path, init) => fetch(path, init);
 function showCreatePage() {
   if (location.pathname !== "/") history.replaceState(null, "", "/");
   track({ event: "page_viewed", properties: { path: "/" } });
-  renderCreate(receipt!, announce, async (text, ttl) => {
-    const outcome = await issueTicket(text, ttl, transport, location.origin);
+  renderCreate(receipt!, announce, async (text, ttl, lockTo) => {
+    const outcome = await issueTicket(text, ttl, transport, location.origin, lockTo ? { lockTo } : {});
     if (outcome.kind === "issued") track({ event: "stub_generated", properties: { ttl_seconds: ttl } });
     return outcome;
   });

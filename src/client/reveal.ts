@@ -1,15 +1,17 @@
 import { copyButton } from "./copy";
 import { h } from "./dom";
-import { pairsOf, parseDotenv } from "./dotenv";
+import { pairsOf, parseDotenv } from "../core/dotenv";
 import { formatStamp } from "./format";
 import { attachStub, perforation, showReceipt, tearStub, type Announce } from "./receipt";
 import {
   inspectTicket,
+  lockedTicketLink,
   revealTicket,
+  ticketLink,
   type FragmentReading,
   type TicketCapability,
   type Transport,
-} from "./ticket";
+} from "../core/ticket";
 
 export interface RevealContext {
   transport: Transport;
@@ -31,6 +33,10 @@ export async function renderReveal(
         "Everything after the # in the link is the key, and it's cut short here. " +
         "Ask the sender to paste the whole link again.",
     });
+  }
+  if (reading.kind === "locked") {
+    // Nothing is consumed and nothing can be: the key is wrapped to one machine's identity.
+    return renderLocked(receipt, lockedTicketLink(location.origin, reading.locked), context);
   }
   if (reading.kind === "unsupported_version") {
     context.finish();
@@ -87,6 +93,7 @@ function renderSealed(
       "It opens once. Tearing it voids the link for everyone, including you, " +
         "so be ready to copy what's inside.",
     ),
+    pullHint(ticketLink(location.origin, capability), context.announce),
     tear,
     error,
   );
@@ -146,6 +153,34 @@ function renderSealed(
     context.announce,
   );
   attachStub(receipt, stub);
+}
+
+const PULL_COMMAND = "npx -y @talix/stubs pull";
+
+/** The CLI command for this exact ticket, with a copy button, so it can go straight to an agent. */
+function pullHint(link: string, announce: Announce, lead = "Pulling this into a project? ") {
+  const command = `${PULL_COMMAND} ${link}`;
+  // The page already took the key out of the address bar; don't put it back on screen.
+  const shown = `${PULL_COMMAND} <this link>`;
+  return h(
+    "p",
+    { class: "fine" },
+    lead,
+    h(
+      "span",
+      { class: "command" },
+      h("code", {}, shown),
+      copyButton({
+        label: "COPY",
+        className: "copy",
+        ariaLabel: "Copy the pull command",
+        text: () => command,
+        announce,
+        copiedMessage: "Command copied.",
+      }),
+    ),
+    " writes it straight to .env.local.",
+  );
 }
 
 function renderOpened(receipt: HTMLElement, plaintext: string, context: RevealContext) {
@@ -223,6 +258,13 @@ function renderOpened(receipt: HTMLElement, plaintext: string, context: RevealCo
               `${unreadable} ${unreadable === 1 ? "line wasn't" : "lines weren't"} KEY=VALUE. ` +
                 "Copy all includes them exactly as sent.",
             ),
+          h(
+            "p",
+            { class: "fine" },
+            "Next time, skip the copy-paste: ",
+            h("code", {}, `${PULL_COMMAND} <link>`),
+            " writes a stub straight to .env.local.",
+          ),
         ],
         [copyAll, download],
       ],
@@ -230,6 +272,30 @@ function renderOpened(receipt: HTMLElement, plaintext: string, context: RevealCo
       focus: copyAll,
     },
     announce,
+  );
+}
+
+function renderLocked(receipt: HTMLElement, link: string, context: RevealContext) {
+  showReceipt(
+    receipt,
+    {
+      sections: [
+        [
+          h("p", { class: "admit" }, "LOCKED STUB"),
+          h(
+            "p",
+            { class: "lede" },
+            "This stub is locked to one machine. A browser can't open it, and the link alone " +
+              "can't either. On that machine, run:",
+          ),
+          pullHint(link, context.announce, ""),
+        ],
+        [h("a", { class: "text-button", href: "/" }, "PRINT YOUR OWN")],
+      ],
+      feed: true,
+      message: "This stub is locked to one machine. Open it there with the stubs command line.",
+    },
+    context.announce,
   );
 }
 

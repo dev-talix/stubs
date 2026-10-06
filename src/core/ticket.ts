@@ -9,6 +9,7 @@
 
 import { createTicketApi, type Transport } from "./api";
 import { deriveTicketKeys, generateTicketKey, seal, unseal } from "./crypto";
+import { LINK_FORMAT_VERSION_LOCKED, LOCKED_PATTERN, lockTicketKey, parsePublicId } from "./lock";
 import {
   MAX_PLAINTEXT_BYTES,
   PATTERNS,
@@ -27,6 +28,8 @@ const FRAGMENT_PATTERN = /^v(\d+)\.(.*)$/;
 
 export type FragmentReading =
   | { kind: "ticket"; capability: TicketCapability }
+  /** A v2 link: the key is wrapped to a recipient; `locked` is `<ephemeralPub>.<wrapped>`. */
+  | { kind: "locked"; locked: string }
   | { kind: "missing" }
   | { kind: "malformed" }
   | { kind: "unsupported_version" };
@@ -36,28 +39,53 @@ export function parseTicketFragment(fragment: string): FragmentReading {
   if (text === "") return { kind: "missing" };
   const match = FRAGMENT_PATTERN.exec(text);
   if (!match) return { kind: "malformed" };
-  if (Number(match[1]) !== TICKET_FORMAT.version) return { kind: "unsupported_version" };
-  const key = match[2] ?? "";
-  if (!PATTERNS.ticketKey.test(key)) return { kind: "malformed" };
-  return { kind: "ticket", capability: key as TicketCapability };
+  const version = Number(match[1]);
+  const body = match[2] ?? "";
+  if (version === TICKET_FORMAT.version) {
+    if (!PATTERNS.ticketKey.test(body)) return { kind: "malformed" };
+    return { kind: "ticket", capability: body as TicketCapability };
+  }
+  if (version === LINK_FORMAT_VERSION_LOCKED) {
+    if (!LOCKED_PATTERN.test(body)) return { kind: "malformed" };
+    return { kind: "locked", locked: body };
+  }
+  return { kind: "unsupported_version" };
 }
 
 export function ticketLink(origin: string, capability: TicketCapability): string {
   return `${origin}/t#v${TICKET_FORMAT.version}.${capability}`;
 }
 
+/** A link whose fragment holds the ticket key wrapped to one recipient (see lock.ts). */
+export function lockedTicketLink(origin: string, lockedBody: string): string {
+  return `${origin}/t#v${LINK_FORMAT_VERSION_LOCKED}.${lockedBody}`;
+}
+
+export interface IssueOptions {
+  /** A recipient's public id (`stubs1…`). Must already be validated with parsePublicId. */
+  lockTo?: string;
+}
+
 const ISSUE_ATTEMPTS = 3;
 
 export type IssueOutcome =
   | { kind: "issued"; link: string; expiresAt: number }
-  | { kind: "failed"; reason: "empty" | "too_large" | "rate_limited" | "network" | "server" };
+  | {
+      kind: "failed";
+      /** "bad_recipient": the id is well-formed but can't receive a locked stub (degenerate key). */
+      reason: "empty" | "too_large" | "bad_recipient" | "rate_limited" | "network" | "server";
+    };
 
 export async function issueTicket(
   plaintext: string,
   ttlSeconds: TtlSeconds,
   transport: Transport,
   origin: string,
+  options: IssueOptions = {},
 ): Promise<IssueOutcome> {
+  if (options.lockTo !== undefined && !parsePublicId(options.lockTo)) {
+    throw new Error("lockTo must be a validated public id");
+  }
   if (plaintext.trim() === "") return { kind: "failed", reason: "empty" };
   if (new TextEncoder().encode(plaintext).length > MAX_PLAINTEXT_BYTES) {
     return { kind: "failed", reason: "too_large" };
@@ -77,11 +105,19 @@ export async function issueTicket(
     } catch {
       return { kind: "failed", reason: "server" };
     }
+    // Everything local, including the wrap, happens before the server hears about the ticket,
+    // so a failure here leaves nothing behind. A retry below draws a fresh key and a fresh wrap.
+    let link = ticketLink(origin, capability);
+    if (options.lockTo) {
+      try {
+        link = lockedTicketLink(origin, await lockTicketKey(capability, options.lockTo));
+      } catch {
+        return { kind: "failed", reason: "bad_recipient" };
+      }
+    }
 
     const created = await api.create({ id: keys.id, claimHash: keys.claimHash, ...sealed, ttlSeconds });
-    if (created.ok) {
-      return { kind: "issued", link: ticketLink(origin, capability), expiresAt: created.value.expiresAt };
-    }
+    if (created.ok) return { kind: "issued", link, expiresAt: created.value.expiresAt };
     if (created.failure !== "exists") return { kind: "failed", reason: created.failure };
   }
   return { kind: "failed", reason: "server" };

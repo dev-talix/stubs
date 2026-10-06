@@ -34,6 +34,10 @@ expiry, the server copy is deleted.
 - The page takes the key out of the address bar as soon as it loads. Once a ticket is opened or
   found void, the tab forgets it: refreshing, going back, or reopening the tab lands on the
   create page, and the opened page is blanked before the browser can cache it.
+- A stub can be locked to a recipient's machine. The link then carries the ticket key wrapped
+  to their X25519 public key (ephemeral ECDH, HKDF-SHA256, AES-GCM); only `stubs pull` on that
+  machine can unwrap it. The server sees no difference, and the link alone can't open, check,
+  or burn the stub.
 - Strict CSP with no third-party origins. Fonts are self-hosted. This also blocks anything the
   edge injects into pages (such as Cloudflare's Web Analytics beacon), which could otherwise
   read the URL while the key is still in it.
@@ -51,15 +55,33 @@ and visitors with Global Privacy Control or Do Not Track send nothing.
   (`wrangler secret put POSTHOG_KEY`). Without the secret, events are accepted and dropped.
 - Each page load gets a random id held in memory: no cookies, no storage, no person profiles.
 
+## For agents
+
+An agent handed a stubs link can move the values into a project without ever seeing them.
+[`@talix/stubs`](cli/README.md) opens the link, writes the values into `.env.local`, and prints
+only the key names. It runs as a CLI or as an MCP server for Claude Code, Cursor, and Codex.
+A stub can also be locked to one machine: the recipient runs `npx -y @talix/stubs init` once
+and shares the id it prints; the sender pastes it into "Lock to a recipient". A locked link is
+useless without that machine's identity, so it's safe to leave in a chat with an agent.
+Add this to a project's `AGENTS.md`:
+
+```markdown
+When given a link on stubs.talix.app, run `npx -y @talix/stubs pull <link>` (or the
+`pull_stub` tool). It writes the values into `.env.local` and prints only the key names.
+Never `cat`, read, or print `.env*` files.
+```
+
+Commands, exit codes, and MCP setup are in [cli/README.md](cli/README.md).
+
 ## Known limits
 
 - Burn-on-read is single-phase. If the claim response is lost in transit (connection drops at
   that exact moment), the secret is already gone and the recipient has to ask for a new link.
   The page says so rather than guessing. A grace window would fix it but weaken the one-time
   guarantee.
-- Until a ticket is torn, the full link sits wherever it was sent, and in the recipient's
-  browser history (Chrome's history keeps the URL as first visited). Anyone with that link can
-  open it first.
+- Until an unlocked ticket is torn, the full link sits wherever it was sent, and in the
+  recipient's browser history (Chrome's history keeps the URL as first visited). Anyone with
+  that link can open it first. Locking a stub to the recipient removes this.
 - An unopened ticket is kept in the tab's session storage so a refresh before tearing works.
   Browsers can write session storage to disk for session restore. It's removed the moment the
   ticket is opened or found void.
@@ -75,13 +97,14 @@ and visitors with Global Privacy Control or Do Not Track send nothing.
 |---|---|
 | `src/shared/protocol.ts` | Wire contract: routes, payloads, runtime validation, error codes, format sizes |
 | `src/worker/` | Worker API (`/api/*`) and the `SecretBox` Durable Object |
-| `src/client/ticket.ts` | The Ticket module: issue, inspect, reveal. Owns keys and their order of use |
+| `src/core/` | Runtime-agnostic: the Ticket module (issue, inspect, reveal), crypto, wire adapter, `.env` parser. Used by the browser, the CLI, and the tests |
 | `src/client/ticket-session.ts` | Key custody in the recipient's tab |
 | `src/client/create-flow.ts` | Ticket creation as a state machine |
-| `src/client/` (rest) | Views, receipt screen, crypto, wire adapter, `.env` parser |
+| `src/client/` | Browser views, receipt screen, key custody, creation state |
+| `cli/` | `@talix/stubs`: CLI and MCP server for pulling stubs into a project |
 | `public/_headers` | CSP and security headers for static assets |
 | `test/worker/` | API and end-to-end tests inside workerd (`@cloudflare/vitest-pool-workers`) |
-| `test/client/`, `test/shared/` | Client and contract tests |
+| `test/client/`, `test/core/`, `test/shared/` | Client, core, and contract tests |
 
 ## API
 
@@ -103,6 +126,7 @@ pnpm dev          # Vite + local workerd on http://localhost:5173
 pnpm test         # worker + client tests
 pnpm typecheck    # wrangler types, then tsc -b
 pnpm build
+pnpm --filter @talix/stubs build   # CLI bundle into cli/dist/
 pnpm deploy       # build, then wrangler deploy to stubs.talix.app
 ```
 

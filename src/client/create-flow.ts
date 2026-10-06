@@ -1,8 +1,9 @@
 // Ticket creation as an explicit state machine, so the view only renders states. One print can
 // be in flight at a time, and what gets printed is the text as it was when submitted.
 
-import { pairsOf, parseDotenv, type EnvLine } from "./dotenv";
-import type { IssueOutcome } from "./ticket";
+import { pairsOf, parseDotenv, type EnvLine } from "../core/dotenv";
+import { PUBLIC_ID_PATTERN } from "../core/lock";
+import type { IssueOutcome } from "../core/ticket";
 import { MAX_PLAINTEXT_BYTES, type TtlSeconds } from "../shared/protocol";
 
 export interface Draft {
@@ -32,9 +33,15 @@ export type CreateState =
   | { kind: "editing" }
   | { kind: "printing" }
   | { kind: "failed"; reason: FailureReason }
-  | { kind: "printed"; link: string; expiresAt: number; pairCount: number };
+  | { kind: "printed"; link: string; expiresAt: number; pairCount: number; locked: boolean };
 
-export type Issue = (text: string, ttlSeconds: TtlSeconds) => Promise<IssueOutcome>;
+/** `lockTo` is a recipient's public id, or empty for an ordinary stub. */
+export type Issue = (text: string, ttlSeconds: TtlSeconds, lockTo: string) => Promise<IssueOutcome>;
+
+/** Empty is fine (not locked); anything else must be a full public id. */
+export function isAcceptableRecipient(lockTo: string): boolean {
+  return lockTo === "" || PUBLIC_ID_PATTERN.test(lockTo);
+}
 
 export class CreateFlow {
   #state: CreateState = { kind: "editing" };
@@ -48,19 +55,22 @@ export class CreateFlow {
     return this.#state;
   }
 
-  /** Whether a submit right now would print, given the current text. */
-  canSubmit(text: string): boolean {
-    return this.#accepting() && assessDraft(text).printable;
+  /** Whether a submit right now would print, given the current text and recipient. */
+  canSubmit(text: string, lockTo = ""): boolean {
+    return this.#accepting() && assessDraft(text).printable && isAcceptableRecipient(lockTo);
   }
 
-  async submit(text: string, ttlSeconds: TtlSeconds): Promise<void> {
-    if (!this.canSubmit(text)) return;
+  async submit(text: string, ttlSeconds: TtlSeconds, lockTo = ""): Promise<void> {
+    if (!this.canSubmit(text, lockTo)) return;
     const { pairCount } = assessDraft(text);
     this.#set({ kind: "printing" });
-    const outcome = await this.issue(text, ttlSeconds);
+    // Never strand the flow in "printing": an unexpected throw becomes an ordinary failure.
+    const outcome = await this.issue(text, ttlSeconds, lockTo).catch(
+      (): IssueOutcome => ({ kind: "failed", reason: "server" }),
+    );
     this.#set(
       outcome.kind === "issued"
-        ? { kind: "printed", link: outcome.link, expiresAt: outcome.expiresAt, pairCount }
+        ? { kind: "printed", link: outcome.link, expiresAt: outcome.expiresAt, pairCount, locked: lockTo !== "" }
         : { kind: "failed", reason: outcome.reason },
     );
   }

@@ -12,7 +12,8 @@ import {
   revealTicket,
   type TicketCapability,
   type Transport,
-} from "../../src/client/ticket";
+} from "../../src/core/ticket";
+import { generateIdentity, unlockTicketKey } from "../../src/core/lock";
 import { MAX_PLAINTEXT_BYTES } from "../../src/shared/protocol";
 
 const ORIGIN = "https://stubs.test";
@@ -87,6 +88,28 @@ describe("ticket end to end", () => {
     );
     expect(outcomes.filter((o) => o.kind === "opened")).toHaveLength(1);
     expect(outcomes.filter((o) => o.kind === "void")).toHaveLength(19);
+  });
+
+  it("opens a locked stub only for the recipient, through the real Worker", async () => {
+    const { transport, sent } = spyTransport();
+    const recipient = await generateIdentity();
+    const stranger = await generateIdentity();
+    const issued = await issueTicket(env, 3600, transport, ORIGIN, { lockTo: recipient.publicId });
+    if (issued.kind !== "issued") throw new Error(issued.reason);
+
+    const reading = parseTicketFragment(new URL(issued.link).hash);
+    if (reading.kind !== "locked") throw new Error(reading.kind);
+    expect(await unlockTicketKey(reading.locked, stranger)).toBeNull();
+    const key = await unlockTicketKey(reading.locked, recipient);
+    if (!key) throw new Error("recipient could not unlock");
+
+    expect((await inspectTicket(key as TicketCapability, transport)).kind).toBe("sealed");
+    expect(await revealTicket(key as TicketCapability, transport)).toEqual({ kind: "opened", plaintext: env });
+    expect(await revealTicket(key as TicketCapability, transport)).toEqual({ kind: "void" });
+    // Neither the unwrapped key nor the recipient's secret ever went over the wire.
+    const wire = sent.join("\n");
+    expect(wire).not.toContain(key);
+    expect(wire).not.toContain(recipient.secret);
   });
 
   it("gives every ticket its own link", async () => {

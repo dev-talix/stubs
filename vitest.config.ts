@@ -9,10 +9,13 @@ export default defineConfig({
         test: { name: "worker", include: ["test/worker/**/*.test.ts"] },
       },
       {
+        test: { name: "cli", environment: "node", include: ["cli/test/**/*.test.ts"] },
+      },
+      {
         test: {
           name: "client",
           environment: "node",
-          include: ["test/client/**/*.test.ts", "test/shared/**/*.test.ts"],
+          include: ["test/client/**/*.test.ts", "test/core/**/*.test.ts", "test/shared/**/*.test.ts"],
         },
       },
     ],

@@ -8,7 +8,7 @@
 // - once a ticket is opened or found void, it's forgotten, so refreshing, going back, or
 //   reopening the tab lands on the create page instead.
 
-import { parseTicketFragment, type FragmentReading } from "./ticket";
+import { parseTicketFragment, type FragmentReading } from "../core/ticket";
 
 const STORAGE_KEY = "ticket";
 

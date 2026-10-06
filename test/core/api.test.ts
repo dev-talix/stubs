@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createTicketApi, type Transport } from "../../src/client/api";
+import { createTicketApi, type Transport } from "../../src/core/api";
 
 const ID = "AbCdEfGhIjKlMnOpQrStUv";
 const PROOF = { claimSecret: "A".repeat(43) };
