@@ -166,6 +166,82 @@ body {
   line-height: 1.9;
 }
 
+/* ---------- For agents ---------- */
+
+.agents {
+  margin-top: 44px;
+  padding-top: 28px;
+  border-top: 1px solid #3b3833;
+  font-size: var(--small);
+  line-height: 1.6;
+}
+
+.agents p {
+  margin: 0 0 14px;
+}
+
+.agents-title {
+  margin: 0 0 14px;
+  color: var(--paper);
+  font: var(--pixel-s) / 1.6 var(--display);
+  letter-spacing: 0.1em;
+}
+
+.agents code {
+  color: var(--paper);
+}
+
+.agents a {
+  color: var(--paper);
+  text-underline-offset: 3px;
+}
+
+.snippet {
+  position: relative;
+  margin: 0 0 14px;
+}
+
+.snippet-label {
+  display: block;
+  margin-bottom: 6px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.snippet pre {
+  margin: 0;
+  padding: 12px 72px 12px 14px;
+  border: 1px solid #3b3833;
+  background: var(--machine);
+  font: 12px / 1.6 var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.snippet pre code {
+  color: var(--paper);
+}
+
+/* Wins over the paper-coloured .copy rule below by specificity. */
+.agents .copy {
+  position: absolute;
+  top: 26px;
+  right: 8px;
+  border-color: var(--desk-text);
+  color: var(--paper);
+  background: var(--machine);
+}
+
+.agents .copy:hover {
+  border-color: var(--paper);
+  color: var(--desk);
+  background: var(--paper);
+}
+
+.agents .copy:focus-visible {
+  outline-color: var(--paper);
+}
+
 /* ---------- Receipt ---------- */
 
 .receipt {

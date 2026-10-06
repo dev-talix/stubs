@@ -142,13 +142,27 @@ describe("writeRecoveryFile", () => {
     const now = new Date("2026-10-05T12:34:56.789Z");
     const first = await writeRecoveryFile(dir, ".env.local", "A=1", now);
     const second = await writeRecoveryFile(dir, ".env.local", "A=2", new Date(now.getTime() + 1));
-    expect(first).toBe(join(dir, "2026-10-05T12-34-56.789Z-.env.local"));
+    expect(first.startsWith(join(dir, "2026-10-05T12-34-56.789Z-.env.local-"))).toBe(true);
+    expect(first).toMatch(/-[0-9a-f]{6}$/);
     expect(second).not.toBe(first);
     expect(await readFile(first, "utf8")).toBe("A=1");
     expect(await readFile(second, "utf8")).toBe("A=2");
     expect((await stat(first)).mode & 0o777).toBe(0o600);
     expect((await stat(dir)).mode & 0o777).toBe(0o700);
     expect((await readdir(dir)).filter((name) => name.endsWith(".tmp"))).toEqual([]);
+  });
+});
+
+describe("writeRecoveryFile collisions", () => {
+  it("keeps two recoveries made in the same millisecond", async () => {
+    const dir = join(await tempDir(), "recovered");
+    const frozen = new Date("2026-10-05T12:34:56.789Z");
+    const first = await writeRecoveryFile(dir, ".env.local", "A=1", frozen);
+    const second = await writeRecoveryFile(dir, ".env.local", "A=2", frozen);
+    expect(second).not.toBe(first);
+    expect((await readdir(dir)).sort()).toHaveLength(2);
+    expect(await readFile(first, "utf8")).toBe("A=1");
+    expect(await readFile(second, "utf8")).toBe("A=2");
   });
 });
 

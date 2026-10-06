@@ -28,6 +28,9 @@ describe("decideGuard", () => {
   it("names exactly what to add to .gitignore", () => {
     expect(guardMessage("not_ignored", "config/.env.local")).toContain("Add `.env.local` to .gitignore");
     expect(guardMessage("tracked", ".env")).toContain("git rm --cached .env");
+    expect(guardMessage("not_ignored", ".env.local", "shared/real.env")).toContain(
+      ".env.local points at shared/real.env, which git would track. Add `shared/real.env`",
+    );
   });
 });
 
@@ -48,13 +51,18 @@ describe("probeGit", () => {
     const dir = await repo();
     await writeFile(join(dir, ".gitignore"), ".env*.local\n");
     await mkdir(join(dir, "app"));
-    expect(await probeGit(join(dir, ".env.local"))).toEqual({ kind: "repo", ignored: true, tracked: false });
-    expect(await probeGit(join(dir, "app", ".env.local"))).toEqual({ kind: "repo", ignored: true, tracked: false });
+    expect(await probeGit(join(dir, ".env.local"))).toEqual({ kind: "repo", ignored: true, tracked: false, root: dir });
+    expect(await probeGit(join(dir, "app", ".env.local"))).toEqual({
+      kind: "repo",
+      ignored: true,
+      tracked: false,
+      root: dir,
+    });
   });
 
   it("sees a file that isn't ignored", async () => {
     const dir = await repo();
-    expect(await probeGit(join(dir, ".env.local"))).toEqual({ kind: "repo", ignored: false, tracked: false });
+    expect(await probeGit(join(dir, ".env.local"))).toEqual({ kind: "repo", ignored: false, tracked: false, root: dir });
   });
 
   it("sees a tracked file even when .gitignore matches it", async () => {
@@ -63,6 +71,6 @@ describe("probeGit", () => {
     await exec("git", ["add", ".env"], { cwd: dir });
     await exec("git", ["commit", "-qm", "oops"], { cwd: dir });
     await writeFile(join(dir, ".gitignore"), ".env\n");
-    expect(await probeGit(join(dir, ".env"))).toEqual({ kind: "repo", ignored: false, tracked: true });
+    expect(await probeGit(join(dir, ".env"))).toEqual({ kind: "repo", ignored: false, tracked: true, root: dir });
   });
 });

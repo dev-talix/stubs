@@ -8,7 +8,8 @@ import { basename, dirname, join } from "node:path";
 
 export type GitFacts =
   | { kind: "no_repo" }
-  | { kind: "repo"; ignored: boolean; tracked: boolean }
+  /** `root` is the work tree's top level, when git reported it. */
+  | { kind: "repo"; ignored: boolean; tracked: boolean; root?: string }
   /** Possibly in a repo, but git couldn't say whether the file is ignored. */
   | { kind: "unknown" };
 
@@ -24,10 +25,27 @@ export function decideGuard(facts: GitFacts, allowTracked: boolean): GuardDecisi
   return { kind: "allow" };
 }
 
-/** The refusal, naming exactly what to add to .gitignore. */
-export function guardMessage(reason: "tracked" | "not_ignored" | "unknown", file: string): string {
-  const entry = basename(file);
+/**
+ * The refusal, naming exactly what to add to .gitignore. When `file` is a symlink, the guard
+ * judged its destination, so `linkTarget` (repo-relative where possible) is what to ignore.
+ */
+export function guardMessage(
+  reason: "tracked" | "not_ignored" | "unknown",
+  file: string,
+  linkTarget?: string,
+): string {
   const nothing = "Nothing was consumed.";
+  if (linkTarget !== undefined) {
+    switch (reason) {
+      case "tracked":
+        return `${file} points at ${linkTarget}, which is tracked by git. From the repository root, run \`git rm --cached ${linkTarget}\`, add \`${linkTarget}\` to .gitignore, then pull again (or pass --allow-tracked). ${nothing}`;
+      case "not_ignored":
+        return `${file} points at ${linkTarget}, which git would track. Add \`${linkTarget}\` to the .gitignore at the repository root, then pull again (or pass --allow-tracked). ${nothing}`;
+      case "unknown":
+        return `Couldn't ask git whether ${linkTarget} (where ${file} points) is ignored; refusing to write inside a repository. Pass --allow-tracked to override.`;
+    }
+  }
+  const entry = basename(file);
   switch (reason) {
     case "tracked":
       return `${file} is tracked by git. Run \`git rm --cached ${file}\`, add \`${entry}\` to .gitignore, then pull again (or pass --allow-tracked). ${nothing}`;
@@ -62,13 +80,16 @@ export async function probeGit(file: string, git: GitRunner = runGit): Promise<G
     return (await hasGitAbove(cwd)) ? { kind: "unknown" } : { kind: "no_repo" };
   }
 
+  const top = await git(["rev-parse", "--show-toplevel"], cwd);
+  const root = top.code === 0 && top.stdout.trim() !== "" ? { root: top.stdout.trim() } : {};
+
   const tracked = await git(["ls-files", "--error-unmatch", "--", name], cwd);
-  if (tracked.code === 0) return { kind: "repo", ignored: false, tracked: true };
+  if (tracked.code === 0) return { kind: "repo", ignored: false, tracked: true, ...root };
   if (tracked.code !== 1) return { kind: "unknown" };
 
   const ignored = await git(["check-ignore", "-q", "--", name], cwd);
-  if (ignored.code === 0) return { kind: "repo", ignored: true, tracked: false };
-  if (ignored.code === 1) return { kind: "repo", ignored: false, tracked: false };
+  if (ignored.code === 0) return { kind: "repo", ignored: true, tracked: false, ...root };
+  if (ignored.code === 1) return { kind: "repo", ignored: false, tracked: false, ...root };
   return { kind: "unknown" };
 }
 

@@ -2,8 +2,8 @@
 // does, because the claim destroys the server copy: after it, this process holds the only one,
 // so nothing after the claim refuses. Existing keys are skipped rather than treated as errors.
 
-import { access, constants, readFile, realpath, stat } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
+import { access, constants, lstat, readFile, realpath, stat } from "node:fs/promises";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { revealTicket, type RevealOutcome, type Transport } from "../../src/core/ticket";
 import { isNotFound, mergeEnv, writeFileAtomic, writeRecoveryFile } from "./env-file";
 import { decideGuard, guardMessage, probeGit, type GitFacts } from "./git-guard";
@@ -51,8 +51,14 @@ export async function pullStub(options: PullOptions, deps: PullDeps): Promise<Pu
   if (isFailure(target)) return target;
 
   if (!options.allowTracked) {
-    const decision = decideGuard(await (deps.probeGit ?? probeGit)(target), false);
-    if (decision.kind === "refuse") return fail("refused", guardMessage(decision.reason, file));
+    const facts = await (deps.probeGit ?? probeGit)(target);
+    const decision = decideGuard(facts, false);
+    if (decision.kind === "refuse") {
+      // A symlink's destination is what git judged, so that's what the user has to ignore.
+      const isLink = await lstat(resolve(deps.cwd, file)).then((entry) => entry.isSymbolicLink(), () => false);
+      const shown = !isLink ? undefined : facts.kind === "repo" && facts.root ? relative(facts.root, target) : target;
+      return fail("refused", guardMessage(decision.reason, file, shown));
+    }
   }
 
   let revealed: RevealOutcome;

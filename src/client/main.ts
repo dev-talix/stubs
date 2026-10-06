@@ -1,6 +1,7 @@
 import "@fontsource/fragment-mono/400.css";
 import "./styles.css";
 import { track } from "./analytics";
+import { copyText } from "./copy";
 import { renderCreate } from "./create";
 import { renderReveal } from "./reveal";
 import { issueTicket, type Transport } from "../core/ticket";
@@ -17,6 +18,18 @@ function announce(message: string) {
 }
 
 const transport: Transport = (path, init) => fetch(path, init);
+
+// Static snippets in the footer get a working COPY button.
+for (const button of document.querySelectorAll<HTMLButtonElement>("button[data-copy]")) {
+  const source = document.getElementById(button.dataset.copy ?? "");
+  if (!source) continue;
+  button.addEventListener("click", async () => {
+    if (!(await copyText(source.textContent ?? ""))) return;
+    button.textContent = "COPIED";
+    announce("Copied.");
+    setTimeout(() => (button.textContent = "COPY"), 1600);
+  });
+}
 
 function showCreatePage() {
   if (location.pathname !== "/") history.replaceState(null, "", "/");

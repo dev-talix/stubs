@@ -3,7 +3,7 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type { CallToolResult, JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import type { Transport } from "../../src/core/ticket";
 import { checkStub } from "./check";
@@ -109,6 +109,22 @@ export function createMcpServer(deps: McpDeps): McpServer {
   return server;
 }
 
+/**
+ * Redacts every outgoing JSON-RPC message, not just our tool results: the SDK writes some text
+ * itself (for example "Tool <name> not found", which echoes whatever name the client sent).
+ * Our own payloads are already redacted, so this is a no-op for them. The id is left alone so
+ * responses still match their requests.
+ */
+export function redactOutgoing(transport: StdioServerTransport): StdioServerTransport {
+  const send = transport.send.bind(transport);
+  transport.send = (message) => {
+    const { id, ...rest } = message as JSONRPCMessage & { id?: unknown };
+    const redacted = redactDeep(rest);
+    return send((id === undefined ? redacted : { ...redacted, id }) as JSONRPCMessage);
+  };
+  return transport;
+}
+
 export async function startMcpServer(deps: McpDeps): Promise<void> {
-  await createMcpServer(deps).connect(new StdioServerTransport());
+  await createMcpServer(deps).connect(redactOutgoing(new StdioServerTransport()));
 }

@@ -185,6 +185,60 @@ describe("locked stubs through the binary", () => {
   });
 });
 
+describe("stubs mcp over stdio", () => {
+  /** Sends JSON-RPC lines to `stubs mcp` and returns the raw stdout once `id` answers. */
+  function mcpExchange(messages: object[], waitForId: number): Promise<string> {
+    return new Promise((done, failed) => {
+      const env: NodeJS.ProcessEnv = { ...process.env, XDG_CONFIG_HOME: xdg };
+      const child = spawn(process.execPath, [BIN, "mcp"], { cwd, env });
+      let stdout = "";
+      const timer = setTimeout(() => {
+        child.kill();
+        failed(new Error(`no response to ${waitForId}: ${stdout}`));
+      }, 10_000);
+      child.stdout.on("data", (chunk: Buffer) => {
+        stdout += chunk.toString();
+        if (stdout.split("\n").some((line) => line.includes(`"id":${waitForId}`))) {
+          clearTimeout(timer);
+          child.stdin.end();
+          child.kill();
+          done(stdout);
+        }
+      });
+      child.on("error", failed);
+      for (const message of messages) child.stdin.write(`${JSON.stringify(message)}\n`);
+    });
+  }
+
+  it("redacts a link sent as a tool name out of the SDK's error", async () => {
+    const link = await server.seed(STUB, http.origin);
+    const fragment = link.slice(link.indexOf("#") + 1);
+    const stdout = await mcpExchange(
+      [
+        {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "0" } },
+        },
+        { jsonrpc: "2.0", method: "notifications/initialized" },
+        { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: link, arguments: {} } },
+      ],
+      2,
+    );
+    const response = stdout
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+      .find((message) => message.id === 2);
+    expect(JSON.stringify(response)).toContain("<redacted>");
+    expect(stdout).not.toContain(fragment.slice(3, 23));
+    expect(stdout).not.toContain(http.origin);
+    expect(stdout).not.toContain("127.0.0.1");
+    expect(server.store.size).toBe(1);
+  });
+});
+
 describe("stubs binary", () => {
   it("prints usage for every command", async () => {
     const { stdout } = await exec(process.execPath, [BIN, "--help"]);

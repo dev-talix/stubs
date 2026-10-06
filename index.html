@@ -24,6 +24,11 @@
           <article class="receipt" id="receipt">
             <noscript>
               <p class="lede">Stubs encrypts in your browser, so it needs JavaScript to run.</p>
+              <p class="fine">
+                Fetching this from a script or an agent? Don't parse this page. Run
+                <code>npx -y @talix/stubs pull &lt;this link&gt;</code> and it writes the values
+                into .env.local, printing only the key names. Details: https://stubs.talix.app/llms.txt
+              </p>
             </noscript>
           </article>
         </div>
@@ -35,6 +40,36 @@
           <li><span>02</span> The key goes in the link, after the #. Our server never sees it.</li>
           <li><span>03</span> The first person to open the link gets the values. Then it's void.</li>
         </ol>
+
+        <section class="agents" aria-labelledby="agents-title">
+          <h2 id="agents-title" class="agents-title">FOR AGENTS AND SCRIPTS</h2>
+          <p>
+            Hand a stub to Claude Code, Cursor, or Codex and it can pull the values straight into a
+            project without ever seeing them. <code>@talix/stubs</code> on npm opens the link, writes
+            <code>.env.local</code>, and prints only the key names.
+          </p>
+          <div class="snippet">
+            <span class="snippet-label">Pull a stub</span>
+            <pre><code id="snippet-pull">npx -y @talix/stubs pull &lt;link&gt;</code></pre>
+            <button type="button" class="copy" data-copy="snippet-pull">COPY</button>
+          </div>
+          <div class="snippet">
+            <span class="snippet-label">MCP server for Claude Code</span>
+            <pre><code id="snippet-mcp">claude mcp add stubs -- npx -y @talix/stubs mcp</code></pre>
+            <button type="button" class="copy" data-copy="snippet-mcp">COPY</button>
+          </div>
+          <div class="snippet">
+            <span class="snippet-label">Add to your AGENTS.md or CLAUDE.md</span>
+            <pre><code id="snippet-agents">When given a link on stubs.talix.app, run `npx -y @talix/stubs pull &lt;link&gt;` (or the `pull_stub` tool). It writes the values into .env.local and prints only the key names. Never cat, read, or print .env* files.</code></pre>
+            <button type="button" class="copy" data-copy="snippet-agents">COPY</button>
+          </div>
+          <p>
+            Lock a stub to one machine and the link is safe to leave in a chat: the recipient runs
+            <code>npx -y @talix/stubs init</code> once and shares the id it prints. Commands, exit
+            codes, and setup for Cursor and Codex:
+            <a href="https://www.npmjs.com/package/@talix/stubs">npmjs.com/package/@talix/stubs</a>.
+          </p>
+        </section>
       </footer>
     </div>
     <p id="announcer" class="sr-only" role="status" aria-live="polite"></p>

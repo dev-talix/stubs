@@ -115,10 +115,17 @@ export async function unlockTicketKey(locked: string, identity: Pick<Identity, "
   }
 }
 
+/**
+ * Accepts only canonical ids. X25519 ignores the top bit of a public key, but the wrap binds the
+ * exact bytes, so an id with that bit set would lock a stub nobody can open. Likewise the last
+ * base64url character must carry no stray bits, so one key has exactly one id.
+ */
 export function parsePublicId(id: string): Uint8Array<ArrayBuffer> | null {
   if (!PUBLIC_ID_PATTERN.test(id)) return null;
-  const bytes = fromBase64Url(id.slice(PUBLIC_ID_PREFIX.length));
-  return bytes.length === X25519_BYTES ? bytes : null;
+  const text = id.slice(PUBLIC_ID_PREFIX.length);
+  const bytes = fromBase64Url(text);
+  if (bytes.length !== X25519_BYTES || (bytes[31]! & 0x80) !== 0) return null;
+  return toBase64Url(bytes) === text ? bytes : null;
 }
 
 function publicIdOf(publicKey: Uint8Array): string {

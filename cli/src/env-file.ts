@@ -206,7 +206,8 @@ export async function writeFileAtomic(target: string, content: Buffer): Promise<
 /**
  * Last resort after a claim when the target can't be written: the values exist nowhere else.
  * Saved under the user's config directory (never beside the target, which may be in a repo),
- * as `<ISO time>-<target name>`, dir 0700, file 0600. Returns the path written.
+ * as `<ISO time>-<target name>-<6 random hex>`, dir 0700, file 0600. The random part keeps two
+ * recoveries in the same millisecond apart. Returns the path written.
  */
 export async function writeRecoveryFile(
   dir: string,
@@ -217,7 +218,7 @@ export async function writeRecoveryFile(
   await mkdir(dir, { recursive: true, mode: 0o700 });
   await chmod(dir, 0o700);
   // Colons aren't allowed in Windows file names.
-  const path = join(dir, `${now.toISOString().replace(/:/g, "-")}-${targetName}`);
+  const path = join(dir, `${now.toISOString().replace(/:/g, "-")}-${targetName}-${randomBytes(3).toString("hex")}`);
   await writeFileAtomic(path, Buffer.from(plaintext, "utf8"));
   return path;
 }

@@ -173,7 +173,7 @@ describe("pull", () => {
     const dir = join(xdg, "stubs", "recovered");
     expect(failure).toMatchObject({ ok: false, code: "error" });
     expect(failure.recoveredFile.startsWith(dir + "/")).toBe(true);
-    expect(failure.recoveredFile).toMatch(/\/\d{4}-\d\d-\d\dT[\d-]+\.\d{3}Z-\.env\.local$/);
+    expect(failure.recoveredFile).toMatch(/\/\d{4}-\d\d-\d\dT[\d-]+\.\d{3}Z-\.env\.local-[0-9a-f]{6}$/);
     expect(failure.message).toContain(failure.recoveredFile);
     expect(await readFile(failure.recoveredFile, "utf8")).toBe(STUB);
     expect((await stat(failure.recoveredFile)).mode & 0o777).toBe(0o600);
@@ -277,9 +277,30 @@ describe("review probes", () => {
     const link = await server.seed(STUB, ORIGIN);
     const result = await pull(link);
     expect(result.code).toBe(5);
-    expect(result.stderr).toContain("is tracked by git");
+    expect(result.stderr).toBe(
+      "stubs: .env.local points at config.env, which is tracked by git. From the repository root, run `git rm --cached config.env`, add `config.env` to .gitignore, then pull again (or pass --allow-tracked). Nothing was consumed.\n",
+    );
     expect(server.sent).toEqual([]);
     expect(await readFile(join(cwd, "config.env"), "utf8")).toBe("X=1\n");
+  });
+
+  it("names a symlink's destination as the thing to ignore, and that fixes it", async () => {
+    await exec("git", ["init", "-q"], { cwd });
+    await mkdir(join(cwd, "app"));
+    await mkdir(join(cwd, "shared"));
+    await writeFile(join(cwd, ".gitignore"), ".env.local\n");
+    await symlink(join("..", "shared", "real.env"), join(cwd, "app", ".env.local"));
+    await writeFile(join(cwd, "shared", "real.env"), "");
+    const link = await server.seed("A=1", ORIGIN);
+
+    const refused = await pull(link, "--to", "app/.env.local");
+    expect(refused.code).toBe(5);
+    expect(refused.stderr).toContain("app/.env.local points at shared/real.env, which git would track.");
+    expect(refused.stderr).toContain("Add `shared/real.env` to the .gitignore at the repository root");
+
+    await writeFile(join(cwd, ".gitignore"), ".env.local\nshared/real.env\n");
+    expect((await pull(link, "--to", "app/.env.local")).code).toBe(0);
+    expect(await readFile(join(cwd, "shared", "real.env"), "utf8")).toBe("A=1\n");
   });
 
   it("writes through a symlink to an ignored file and keeps the link", async () => {
