@@ -38,9 +38,10 @@ expiry, the server copy is deleted.
   to their X25519 public key (ephemeral ECDH, HKDF-SHA256, AES-GCM); only `stubs pull` on that
   machine can unwrap it. The server sees no difference, and the link alone can't open, check,
   or burn the stub.
-- Strict CSP with no third-party origins. Fonts are self-hosted. This also blocks anything the
-  edge injects into pages (such as Cloudflare's Web Analytics beacon), which could otherwise
-  read the URL while the key is still in it.
+- Strict CSP with no third-party origins. Fonts are self-hosted. Every response is also marked
+  `Cache-Control: no-transform`, so the edge doesn't inject scripts (such as Cloudflare's Web
+  Analytics beacon) that could read the URL while the key is still in it; the CSP would block
+  them anyway.
 
 ## Analytics
 
