@@ -127,7 +127,7 @@ pnpm test         # worker + client tests
 pnpm typecheck    # wrangler types, then tsc -b
 pnpm build
 pnpm --filter @talix/stubs build   # CLI bundle into cli/dist/
-pnpm deploy       # build, then wrangler deploy to stubs.talix.app
+pnpm run deploy   # build, then wrangler deploy (plain `pnpm deploy` is pnpm's own command)
 ```
 
 `compatibility_date` is pinned to a date the bundled test runtime supports. Bump it together
