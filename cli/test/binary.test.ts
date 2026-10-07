@@ -280,7 +280,8 @@ describe("stubs binary", () => {
     const installed = await readFile(join(fakeHome, ".claude/skills/stubs/SKILL.md"), "utf8");
     const { stdout: shown } = await exec(process.execPath, [BIN, "skill", "show"], { cwd, env });
     expect(installed).toBe(shown);
-    expect(installed).toContain("npx -y @talix/stubs@0.3.0 pull");
+    const { version } = JSON.parse(await readFile(join(ROOT, "cli/package.json"), "utf8"));
+    expect(installed).toContain(`npx -y @talix/stubs@${version} pull`);
     expect(await stat(realSkill).then((entry) => entry.mtimeMs, () => null)).toBe(before);
   });
 

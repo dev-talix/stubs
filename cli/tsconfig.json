@@ -9,5 +9,5 @@
     "lib": ["ES2023"],
     "types": ["node"]
   },
-  "include": ["src", "test", "../src/core", "../src/shared"]
+  "include": ["src", "test", "package.json", "../src/core", "../src/shared"]
 }

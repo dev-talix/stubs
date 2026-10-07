@@ -8,10 +8,11 @@ import { pairsOf, parseDotenv, type EnvPair } from "../../src/core/dotenv";
 
 /**
  * Quotes a value only when a dotenv parser would otherwise misread it, and prefers quote styles
- * every common parser reads literally. Single quotes first: npm `dotenv` (Next.js, most Node
- * tools) and our own parser both take them verbatim, and `dotenv-expand` leaves `$` alone
- * inside them. Backticks next. Double quotes only for newlines (the one case all parsers
- * agree needs `\n`), where npm `dotenv` keeps a `\"` or `\\` as typed; that combination is rare.
+ * every common parser reads literally. Single quotes first: npm `dotenv` and our own parser
+ * both take them verbatim. Backticks next. Double quotes only for newlines (the one case all
+ * parsers agree needs `\n`), where npm `dotenv` keeps a `\"` or `\\` as typed; that combination
+ * is rare. No quote style stops `dotenv-expand` (Vite, Next.js) from expanding `$NAME`, which
+ * is why mergeEnv holds such values back instead of writing them live.
  */
 export function formatValue(value: string): string {
   if (!/[\s#"'`$\\]/.test(value)) return value;
@@ -35,6 +36,8 @@ export interface MergePlan {
   content: Buffer | null;
   written: string[];
   skipped: string[];
+  /** Keys whose value looks like a `$NAME` reference; kept as comments, never written live. */
+  held: string[];
   unparsed: number;
   /** 1-based lines of the existing file that parseDotenv couldn't read. */
   malformedLines: number[];
@@ -44,12 +47,25 @@ export interface MergePlan {
 export const UNPARSED_PREFIX = "# unparsed: ";
 /** Prefix for pulled values whose key was already set; kept so the consumed stub isn't lost. */
 export const SKIPPED_PREFIX = "# stubs skipped (already set): ";
+/** Prefix for pulled values held back because a dotenv-expand consumer would expand them. */
+export const HELD_PREFIX = "# stubs held back ($ reference): ";
+
+/**
+ * `$NAME` or `${...}`, the forms `dotenv-expand` rewrites. Vite and Next.js run it on every
+ * value, quoted or not, so a pulled `PUBLIC_X=$PRIVATE_KEY` would copy the recipient's existing
+ * secret into a variable a build may publish, and a password with `$abc` in it would silently
+ * lose that part. Such values are kept as comments for the user to place by hand.
+ */
+export function looksLikeExpansion(value: string): boolean {
+  return /\$\{|\$[A-Za-z_]/.test(value);
+}
 
 /**
  * Merges pulled .env text into an existing file. Keys already in the file are skipped, with the
  * pulled value kept in a comment, unless `overwrite`, in which case their lines are replaced in
- * place. Pulled lines that aren't pairs are appended as comments. Every existing line that isn't
- * replaced is written back as its original bytes.
+ * place. Values that look like `$NAME` references are held back as comments either way. Pulled
+ * lines that aren't pairs are appended as comments. Every existing line that isn't replaced is
+ * written back as its original bytes.
  */
 export function mergeEnv(existing: Buffer | null, pulled: string, overwrite: boolean): MergePlan {
   const base = existing ?? Buffer.alloc(0);
@@ -74,9 +90,11 @@ export function mergeEnv(existing: Buffer | null, pulled: string, overwrite: boo
   const added: string[] = [];
   const replaced: string[] = [];
   const skipped: string[] = [];
+  const held: string[] = [];
   for (const [key, value] of wanted) {
     const found = current.get(key);
-    if (!found) added.push(key);
+    if (looksLikeExpansion(value)) held.push(key);
+    else if (!found) added.push(key);
     else if (overwrite && !found.every((pair) => pair.value === value)) replaced.push(key);
     else skipped.push(key);
   }
@@ -86,9 +104,10 @@ export function mergeEnv(existing: Buffer | null, pulled: string, overwrite: boo
   const appendedLines = [
     ...added.map((key) => formatLine(key, wanted.get(key)!)),
     ...keptSkipped.map((key) => SKIPPED_PREFIX + formatLine(key, wanted.get(key)!)),
+    ...held.map((key) => HELD_PREFIX + formatLine(key, wanted.get(key)!)),
     ...unparsedLines,
   ];
-  const plan = { written, skipped, unparsed: unparsedLines.length, malformedLines };
+  const plan = { written, skipped, held, unparsed: unparsedLines.length, malformedLines };
   if (replaced.length === 0 && appendedLines.length === 0) return { content: null, ...plan };
 
   const eol = base.includes("\r\n") ? "\r\n" : "\n";

@@ -13,6 +13,12 @@
   list and shell history.
 - The skill asks for the recipient's stubs id before `push` and says why: an unlocked link is
   the secret itself.
+- Pulled values that look like a `$NAME` reference are held back as comments and reported as
+  `held`, with a warning. `dotenv-expand` (Vite, Next.js) expands them regardless of quoting, so
+  a hostile stub could have copied an existing secret into a variable a build publishes. The
+  README's claim that single quotes stopped expansion was wrong.
+- The README documents that `npx` prefers a project-local `@talix/stubs` when one is installed,
+  and recommends a global install for checkouts you don't trust.
 
 ## 0.2.0
 

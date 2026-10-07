@@ -8,5 +8,5 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "types": ["vite/client"]
   },
-  "include": ["src/client", "src/core", "src/shared", "test/client", "test/core", "test/shared"]
+  "include": ["src/client", "src/core", "src/shared", "test/client", "test/core", "test/shared", "cli/package.json"]
 }

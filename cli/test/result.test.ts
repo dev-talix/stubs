@@ -17,7 +17,7 @@ describe("exit codes", () => {
 
   it("exits 0 on success", () => {
     expect(exitCodeFor({ ok: true })).toBe(0);
-    expect(exitCodeForResult({ ok: true, file: ".env.local", written: [], skipped: [], unparsed: 0, warnings: [] })).toBe(0);
+    expect(exitCodeForResult({ ok: true, file: ".env.local", written: [], skipped: [], held: [], unparsed: 0, warnings: [] })).toBe(0);
     expect(exitCodeForResult({ ok: true, status: "sealed", expiresAt: 1 })).toBe(0);
   });
 

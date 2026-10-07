@@ -110,6 +110,7 @@ Commands, exit codes, and MCP setup are in [cli/README.md](cli/README.md).
 | `src/client/` | Browser views, receipt screen, key custody, creation state |
 | `cli/` | `@talix/stubs`: CLI and MCP server for pulling stubs into a project |
 | `public/_headers` | CSP and security headers for static assets |
+| `src/llms.txt`, `scripts/sync-version.mjs` | Agent page template and the version sync for markdown docs |
 | `test/worker/` | API and end-to-end tests inside workerd (`@cloudflare/vitest-pool-workers`) |
 | `test/client/`, `test/core/`, `test/shared/` | Client, core, and contract tests |
 
@@ -136,6 +137,11 @@ pnpm build
 pnpm --filter @talix/stubs build   # CLI bundle into cli/dist/
 pnpm run deploy   # build, then wrangler deploy (plain `pnpm deploy` is pnpm's own command)
 ```
+
+The CLI version shown everywhere comes from `cli/package.json`: the site reads it at build
+time, and `pnpm sync-version` rewrites the literal pins in the markdown. To release, bump the
+version there, run `pnpm sync-version`, add a CHANGELOG entry, publish from `cli/`, then
+deploy. `test/shared/pinned-version.test.ts` fails if anything still points at an old version.
 
 `compatibility_date` is pinned to a date the bundled test runtime supports. Bump it together
 with `@cloudflare/vitest-pool-workers`.

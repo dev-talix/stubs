@@ -52,7 +52,7 @@ Skipped 1 existing key: PORT
 ```
 
 ```json
-{"ok":true,"file":".env.local","written":["API_KEY"],"skipped":["PORT"],"unparsed":0}
+{"ok":true,"file":".env.local","written":["API_KEY"],"skipped":["PORT"],"held":[],"unparsed":0,"warnings":[]}
 ```
 
 How the write works:
@@ -64,6 +64,12 @@ How the write works:
 - Values are written bare when that's safe, otherwise quoted in a style that npm `dotenv` and
   the stubs parser both read literally (single quotes first, then backticks, then double quotes
   for values with newlines).
+- A value that looks like a `$NAME` or `${NAME}` reference is never written live. Tools that
+  expand `.env` values (Vite, Next.js through `dotenv-expand`) ignore quoting and would replace
+  it with another variable's value, so a stub saying `PUBLIC_X=$PRIVATE_KEY` could copy your
+  existing secret into a variable a build publishes. Such values are kept as comments
+  (`# stubs held back ($ reference): KEY=…`), listed as `held`, and explained in `warnings`.
+  If the `$` is literal, uncomment the line yourself.
 - A key that's already in the file is skipped, not an error: the pull still succeeds, writes
   the other keys, lists the skipped names, and keeps each skipped value in a comment
   (`# stubs skipped (already set): KEY=…`) so nothing from the used-up stub is lost.
@@ -201,6 +207,13 @@ With `--json`, a failure prints `{"ok":false,"code":"void","message":"…"}`.
 - It has no runtime dependencies. Everything it needs is bundled into the package at build
   time, so the version you pin is the whole supply chain: `npx` installs nothing else, and no
   third-party package is loaded into the process that holds the decrypted values.
+
+One limit of `npx` itself: it prefers a package already installed in the project when one
+matches the requested name and version. A project whose dependencies you don't trust could
+carry a fake `@talix/stubs` under `node_modules`, and `npx -y @talix/stubs@0.3.0` would run it.
+That attacker already runs code in your project, so the extra reach is small, but for untrusted
+checkouts install the CLI globally (`npm i -g @talix/stubs@0.3.0`) and run `stubs` from your PATH,
+which doesn't look in the project.
 
 ## MCP setup
 

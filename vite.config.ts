@@ -1,5 +1,26 @@
+import { readFileSync } from "node:fs";
 import { cloudflare } from "@cloudflare/vite-plugin";
 import { defineConfig, type Plugin } from "vite";
+
+const CLI_VERSION: string = JSON.parse(readFileSync(new URL("./cli/package.json", import.meta.url), "utf8")).version;
+const VERSION_PLACEHOLDER = "{{STUBS_CLI_VERSION}}";
+
+/**
+ * Every CLI command the site shows pins the version in cli/package.json. index.html gets it on
+ * the way through Vite's HTML pipeline (dev and build), and llms.txt is emitted from src/llms.txt
+ * at build time; it isn't served by the dev server.
+ */
+function cliVersion(): Plugin {
+  const stamp = (text: string) => text.replaceAll(VERSION_PLACEHOLDER, CLI_VERSION);
+  return {
+    name: "stubs-cli-version",
+    transformIndexHtml: stamp,
+    generateBundle() {
+      const template = readFileSync(new URL("./src/llms.txt", import.meta.url), "utf8");
+      this.emitFile({ type: "asset", fileName: "llms.txt", source: stamp(template) });
+    },
+  };
+}
 
 // Stub links (/t#…) get their own share card. Link unfurlers fetch /t without the fragment, so
 // all they can ever see is this static page: no key, and nothing that opens or burns a stub.
@@ -39,7 +60,7 @@ function ticketPage(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [cloudflare(), ticketPage()],
+  plugins: [cloudflare(), cliVersion(), ticketPage()],
   // The CSP only allows same-origin fonts and scripts, so never inline assets as data: URIs.
   build: { assetsInlineLimit: 0 },
 });

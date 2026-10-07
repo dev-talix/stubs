@@ -27,7 +27,6 @@ const exists = (path: string) => stat(path).then(() => true, () => false);
 
 describe("renderSkill", () => {
   it("pins every placeholder to the package version", () => {
-    expect(VERSION).toBe("0.3.0");
     expect(SKILL).not.toContain("{{");
     expect(SKILL.split(VERSION)).toHaveLength(6);
     expect(SKILL).toContain(`npx -y @talix/stubs@${VERSION} pull '<link>' --json`);

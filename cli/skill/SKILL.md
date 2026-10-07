@@ -35,7 +35,9 @@ npx -y @talix/stubs@{{VERSION}} pull '<link>' --json
   `@latest`.
 
 Then tell the user which keys were written (`written`), which were already set and skipped
-(`skipped`, kept as comments in the file), and pass on any `warnings`.
+(`skipped`, kept as comments in the file), which were held back because they look like `$NAME`
+references (`held`, also kept as comments; the user decides whether to uncomment them), and pass
+on any `warnings`.
 
 ## Exit codes
 

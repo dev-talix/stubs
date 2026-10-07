@@ -36,6 +36,8 @@ export interface PullSuccess {
   file: string;
   written: string[];
   skipped: string[];
+  /** Kept as comments in the file because a dotenv-expand consumer would expand them. */
+  held: string[];
   unparsed: number;
   warnings: string[];
 }
@@ -82,7 +84,20 @@ export async function pullStub(options: PullOptions, deps: PullDeps): Promise<Pu
         (line) => `Line ${line} of ${file} is malformed; a dotenv parser may not read the keys appended after it.`,
       )
     : [];
-  return { ok: true, file, written: plan.written, skipped: plan.skipped, unparsed: plan.unparsed, warnings };
+  for (const key of plan.held) {
+    warnings.push(
+      `${key} looks like a $NAME reference. Tools that expand .env values (Vite, Next.js) would replace it with another variable's value, so it was kept as a comment in ${file}. If the $ is literal, uncomment it by hand.`,
+    );
+  }
+  return {
+    ok: true,
+    file,
+    written: plan.written,
+    skipped: plan.skipped,
+    held: plan.held,
+    unparsed: plan.unparsed,
+    warnings,
+  };
 }
 
 /**

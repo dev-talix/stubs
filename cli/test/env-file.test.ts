@@ -2,7 +2,7 @@ import { chmod, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promis
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { pairsOf, parseDotenv } from "../../src/core/dotenv";
-import { formatValue, mergeEnv, writeFileAtomic, writeRecoveryFile } from "../src/env-file";
+import { formatValue, looksLikeExpansion, mergeEnv, writeFileAtomic, writeRecoveryFile } from "../src/env-file";
 import { useTempDirs } from "./helpers/temp";
 
 const tempDir = useTempDirs();
@@ -83,7 +83,7 @@ describe("mergeEnv", () => {
 
   it("returns no content when nothing changes", () => {
     const plan = mergeEnv(Buffer.from("A=1\n"), "A=1", true);
-    expect(plan).toEqual({ content: null, written: [], skipped: ["A"], unparsed: 0, malformedLines: [] });
+    expect(plan).toEqual({ content: null, written: [], skipped: ["A"], held: [], unparsed: 0, malformedLines: [] });
   });
 
   it("overwrites changed values in place and leaves everything else alone", () => {
@@ -207,5 +207,40 @@ describe("mergeEnv review fixes", () => {
     const plan = mergeEnv(Buffer.from('A=1\nB="unclosed\nC=3\n'), "D=4", false);
     expect(plan.malformedLines).toEqual([2]);
     expect(text(plan.content)).toBe('A=1\nB="unclosed\nC=3\nD=4\n');
+  });
+});
+
+describe("mergeEnv holds back $ references", () => {
+  it.each(["$PRIVATE_KEY", "${PRIVATE_KEY}", "https://$HOST/x", "pa$$word", "a${b"])("holds back %j", (value) => {
+    expect(looksLikeExpansion(value)).toBe(true);
+  });
+
+  it.each(["plain", "5$", "$1", "$$", "cost: $ 5", "100$."])("writes %j live", (value) => {
+    expect(looksLikeExpansion(value)).toBe(false);
+  });
+
+  it("keeps a referencing value as a comment instead of a live line", () => {
+    const existing = Buffer.from("PRIVATE_KEY=sk-live\n");
+    const plan = mergeEnv(existing, "PUBLIC_X=$PRIVATE_KEY\nOK=1", false);
+    expect(plan).toMatchObject({ written: ["OK"], skipped: [], held: ["PUBLIC_X"] });
+    expect(text(plan.content)).toBe("PRIVATE_KEY=sk-live\nOK=1\n# stubs held back ($ reference): PUBLIC_X='$PRIVATE_KEY'\n");
+    // Nothing a dotenv-expand consumer would act on.
+    expect(pairsOf(parseDotenv(text(plan.content)!)).map((p) => p.key)).toEqual(["PRIVATE_KEY", "OK"]);
+  });
+
+  it("does not overwrite an existing key with a referencing value", () => {
+    const plan = mergeEnv(Buffer.from("API_URL=https://real.example\n"), "API_URL=https://$EVIL/x", true);
+    expect(plan).toMatchObject({ written: [], held: ["API_URL"] });
+    expect(text(plan.content)).toBe(
+      "API_URL=https://real.example\n# stubs held back ($ reference): API_URL='https://$EVIL/x'\n",
+    );
+  });
+
+  it("reports held before unparsed and after skipped comments", () => {
+    const plan = mergeEnv(Buffer.from("A=1\n"), "A=2\nB=$A\nnot a pair", false);
+    expect(text(plan.content)).toBe(
+      "A=1\n# stubs skipped (already set): A=2\n# stubs held back ($ reference): B='$A'\n# unparsed: not a pair\n",
+    );
+    expect(plan).toMatchObject({ written: [], skipped: ["A"], held: ["B"], unparsed: 1 });
   });
 });

@@ -322,6 +322,9 @@ function describe(result: Success, out: Output): void {
   if (result.skipped.length > 0) {
     lines.push(`Skipped ${count(result.skipped.length, "existing key")}${list(result.skipped)}`);
   }
+  if (result.held.length > 0) {
+    lines.push(`Held back ${count(result.held.length, "value")} with a $ reference${list(result.held)}`);
+  }
   if (result.unparsed > 0) {
     lines.push(`Kept ${count(result.unparsed, "unparsed line")} as comments in ${result.file}.`);
   }

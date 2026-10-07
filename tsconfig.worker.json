@@ -13,6 +13,8 @@
     "src/shared",
     "test/worker",
     // The core modules run in every runtime; the e2e test needs them here.
-    "src/core"
+    "src/core",
+    // src/shared/stubs-cli.ts reads the CLI version from it.
+    "cli/package.json"
   ]
 }

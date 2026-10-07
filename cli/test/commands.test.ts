@@ -47,6 +47,7 @@ describe("pull", () => {
       file: "custom.env",
       written: ["API_KEY", "DB_URL", "SECRET"],
       skipped: [],
+      held: [],
       unparsed: 0,
       warnings: [],
     });
@@ -214,7 +215,7 @@ describe("pull", () => {
         probeGit: async () => ({ kind: "no_repo" }),
       },
     );
-    expect(result).toEqual({ ok: true, file: ".env.local", written: ["A"], skipped: [], unparsed: 0, warnings: [] });
+    expect(result).toEqual({ ok: true, file: ".env.local", written: ["A"], skipped: [], held: [], unparsed: 0, warnings: [] });
   });
 });
 
@@ -637,5 +638,24 @@ describe("links on stdin", () => {
     expect(result.code).toBe(3);
     expect(result.stderr).toContain("Nothing on stdin");
     expect(server.sent).toEqual([]);
+  });
+});
+
+describe("pull holds back $ references", () => {
+  it("keeps the value as a comment, warns on stderr, and still exits 0", async () => {
+    await writeFile(join(cwd, ".env.local"), "PRIVATE_KEY=sk-live\n");
+    const link = await server.seed("PUBLIC_X=$PRIVATE_KEY\nOK=1", ORIGIN);
+    const result = await pull(link);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toBe("Pulled 1 value into .env.local: OK\nHeld back 1 value with a $ reference: PUBLIC_X\n");
+    expect(result.stderr).toContain("PUBLIC_X looks like a $NAME reference");
+    expect(result.stderr).not.toContain("sk-live");
+    expect(await envFile()).toBe("PRIVATE_KEY=sk-live\nOK=1\n# stubs held back ($ reference): PUBLIC_X='$PRIVATE_KEY'\n");
+  });
+
+  it("reports held and the warning in JSON", async () => {
+    const link = await server.seed("URL=https://$HOST/path", ORIGIN);
+    const result = await pull(link, "--json");
+    expect(JSON.parse(result.stdout)).toMatchObject({ ok: true, written: [], held: ["URL"], warnings: [expect.stringContaining("URL looks like")] });
   });
 });
