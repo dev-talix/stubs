@@ -611,3 +611,31 @@ describe("locked stubs", () => {
     expect((await cli(args)).code).toBe(3);
   });
 });
+
+describe("links on stdin", () => {
+  const withStdin = (args: string[], stdin: string) => runCli(args, { server, cwd, stdin });
+
+  it("pull - reads the link from stdin and writes the file", async () => {
+    const link = await server.seed(STUB, ORIGIN);
+    const result = await withStdin(["pull", "-", "--json"], `${link}\n`);
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({ ok: true, written: ["API_KEY", "DB_URL", "SECRET"] });
+    expect(await envFile()).toContain("API_KEY=sk-123");
+    expect(result.stdout + result.stderr).not.toContain(link.split("#")[1]);
+  });
+
+  it("check - reads the link from stdin without consuming", async () => {
+    const link = await server.seed(STUB, ORIGIN);
+    const result = await withStdin(["check", "-"], `  ${link}  `);
+    expect(result).toMatchObject({ code: 0, stdout: expect.stringMatching(/^Sealed\./) });
+    expect(server.store.size).toBe(1);
+  });
+
+  it("exits 3 on empty stdin without a request", async () => {
+    await server.seed(STUB, ORIGIN);
+    const result = await withStdin(["pull", "-"], "\n");
+    expect(result.code).toBe(3);
+    expect(result.stderr).toContain("Nothing on stdin");
+    expect(server.sent).toEqual([]);
+  });
+});

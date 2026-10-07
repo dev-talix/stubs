@@ -66,11 +66,14 @@ Then tell the user which keys were written (`written`), which were already set a
 
 ## Sending secrets (only when the user asks)
 
-To make a link from a file the user names:
+Ask for the recipient's stubs id first. They get it by running
+`npx -y @talix/stubs@{{VERSION}} id` on the machine that will pull (or `init` the first time).
+With it, the link is locked to that machine and is safe to paste anywhere:
 
 ```bash
-npx -y @talix/stubs@{{VERSION}} push <file> --ttl 1h --json
+npx -y @talix/stubs@{{VERSION}} push <file> --ttl 1h --to <stubs id> --json
 ```
 
-Add `--to <stubs id>` to lock it to the recipient's machine, which makes the link safe to send
-through chat. The output is the link; give it to the user and don't keep copies of it.
+Only drop `--to` if the user says the stub shouldn't be locked. An unlocked link is the secret
+itself: it stays in this transcript, and whoever opens it first gets the values. Either way the
+output is the link; give it to the user and don't keep copies of it.

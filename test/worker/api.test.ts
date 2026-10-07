@@ -544,6 +544,7 @@ function expectHeaders(response: Response): void {
   expect(response.headers.get("Cache-Control")).toBe("no-store");
   expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
   expect(response.headers.get("Referrer-Policy")).toBe("no-referrer");
+  expect(response.headers.get("Strict-Transport-Security")).toBe("max-age=31536000");
 }
 
 function base64Url(bytes: Uint8Array): string {

@@ -31,6 +31,7 @@ const JSON_HEADERS = {
   "Cache-Control": "no-store",
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "no-referrer",
+  "Strict-Transport-Security": "max-age=31536000",
 };
 
 const ROUTE_TABLE: Record<"create" | "status" | "claim" | "events", Route> = {

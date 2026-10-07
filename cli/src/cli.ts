@@ -31,12 +31,14 @@ export interface Io {
 export const USAGE = `stubs: move one-time .env stubs into a project without printing the values.
 
 Usage:
-  stubs pull <link> [--to <file>] [--overwrite] [--allow-tracked] [--origin <url>] [--json]
+  stubs pull <link>|- [--to <file>] [--overwrite] [--allow-tracked] [--origin <url>] [--json]
       Open the stub and merge its values into <file> (default .env.local).
       Keys already in the file are skipped unless --overwrite. Prints key names only.
       Refuses (exit 5) if git would not ignore the file, unless --allow-tracked.
+      With -, the link is read from stdin (pbpaste | stubs pull -), so it never sits in
+      the process list or your shell history.
 
-  stubs check <link> [--origin <url>] [--json]
+  stubs check <link>|- [--origin <url>] [--json]
       Say whether the stub is still sealed, without opening it.
 
   stubs push [file] [--ttl 5m|1h|1d|7d] [--to <id>] [--origin <url>] [--json]
@@ -208,7 +210,11 @@ export async function run(argv: string[], io: Io): Promise<number> {
   if (positionals.length !== 1) {
     return report(fail("invalid", `${command} needs exactly one link.`), json, out);
   }
-  const link = positionals[0]!;
+  let link = positionals[0]!;
+  if (link === "-") {
+    link = (await io.readStdin()).trim();
+    if (link === "") return report(fail("invalid", "Nothing on stdin. Pipe the link in, or pass it as an argument."), json, out);
+  }
 
   if (command === "check") {
     return report(await checkStub({ link, origin }, { transport, identity }), json, out);

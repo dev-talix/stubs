@@ -11,19 +11,19 @@ in its context, its transcript, or its logs.
 Codex; from then on, any stubs link you hand the agent gets pulled the safe way:
 
 ```bash
-npx -y @talix/stubs@0.2.0 skill install
+npx -y @talix/stubs@0.3.0 skill install
 ```
 
 Run it without installing:
 
 ```bash
-npx -y @talix/stubs@0.2.0 pull 'https://stubs.talix.app/t#v1.…'
+npx -y @talix/stubs@0.3.0 pull 'https://stubs.talix.app/t#v1.…'
 ```
 
 Or install it globally and use the `stubs` bin:
 
 ```bash
-npm i -g @talix/stubs@0.2.0
+npm i -g @talix/stubs@0.3.0
 stubs pull 'https://stubs.talix.app/t#v1.…'
 ```
 
@@ -34,6 +34,8 @@ Needs Node 20 or later.
 ### `stubs pull <link>`
 
 Opens the stub and merges its values into an env file. The stub is used up the moment it opens.
+Pass `-` instead of the link to read it from stdin (`pbpaste | stubs pull -`), which keeps the
+link out of the process list and your shell history.
 
 | Flag | What it does |
 |---|---|
@@ -84,7 +86,7 @@ consumed.
 
 ### `stubs check <link>`
 
-Says whether a stub can still be opened. Never uses it up.
+Says whether a stub can still be opened. Never uses it up. Takes `-` for stdin like `pull`.
 
 | Flag | What it does |
 |---|---|
@@ -141,8 +143,9 @@ Starts an MCP server on stdio, named `stubs`, with two tools:
 
 Both handle locked links with the machine's identity, like the CLI.
 
-There's no push tool. File paths resolve against the server's working directory, and the
-server reads `STUBS_ORIGIN` from its environment. Failures come back as tool results with
+There's no push tool. `file` resolves against the server's working directory and must stay
+inside it: an absolute path, or one that climbs above it with `..`, is refused before any
+network call. The server reads `STUBS_ORIGIN` from its environment. Failures come back as tool results with
 `isError: true` and the error object below.
 
 ### `stubs skill install`
@@ -163,7 +166,7 @@ place. It never touches any other file, and it won't write through a symlinked `
 `SKILL.md` unless you pass `--force`. `stubs skill show` prints the skill instead, for agents
 that load instructions some other way.
 
-The skill pins the CLI version (`@talix/stubs@0.2.0`), so an agent only ever runs a version you
+The skill pins the CLI version (`@talix/stubs@0.3.0`), so an agent only ever runs a version you
 installed on purpose. To move to a newer release, run `skill install` from that release.
 
 ## Exit codes
@@ -195,13 +198,16 @@ With `--json`, a failure prints `{"ok":false,"code":"void","message":"…"}`.
 - It only talks to `https://stubs.talix.app`. A link from any other origin exits `3` without a
   network call, unless you pass `--origin` or set `STUBS_ORIGIN`. So does anything that isn't a
   plain stub link: a query string, credentials, or a character a real link never contains.
+- It has no runtime dependencies. Everything it needs is bundled into the package at build
+  time, so the version you pin is the whole supply chain: `npx` installs nothing else, and no
+  third-party package is loaded into the process that holds the decrypted values.
 
 ## MCP setup
 
 Claude Code:
 
 ```bash
-claude mcp add stubs -- npx -y @talix/stubs@0.2.0 mcp
+claude mcp add stubs -- npx -y @talix/stubs@0.3.0 mcp
 ```
 
 Cursor, in `.cursor/mcp.json`:
@@ -211,7 +217,7 @@ Cursor, in `.cursor/mcp.json`:
   "mcpServers": {
     "stubs": {
       "command": "npx",
-      "args": ["-y", "@talix/stubs@0.2.0", "mcp"]
+      "args": ["-y", "@talix/stubs@0.3.0", "mcp"]
     }
   }
 }
@@ -222,7 +228,7 @@ Codex, in `~/.codex/config.toml`:
 ```toml
 [mcp_servers.stubs]
 command = "npx"
-args = ["-y", "@talix/stubs@0.2.0", "mcp"]
+args = ["-y", "@talix/stubs@0.3.0", "mcp"]
 ```
 
 ## For your AGENTS.md (if you don't use the skill)
@@ -230,7 +236,7 @@ args = ["-y", "@talix/stubs@0.2.0", "mcp"]
 Add this to a project's `AGENTS.md` (or `CLAUDE.md`) so agents know what to do with a link:
 
 ```markdown
-When given a link on stubs.talix.app, run `npx -y @talix/stubs@0.2.0 pull <link>` (or the
+When given a link on stubs.talix.app, run `npx -y @talix/stubs@0.3.0 pull <link>` (or the
 `pull_stub` tool). It writes the values into `.env.local` and prints only the key names.
 Never `cat`, read, or print `.env*` files.
 ```

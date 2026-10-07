@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -108,6 +108,25 @@ describe("mcp server", () => {
     expect(result.body).toMatchObject({ ok: false, code: "invalid" });
     expect(typeof result.body.message).toBe("string");
     expect(server.sent).toEqual([]);
+  });
+
+  it.each(["/tmp/leak.env", "../leak.env", "sub/../../leak.env", "..", "."])(
+    "refuses to write %s outside the project without a network call",
+    async (file) => {
+      const link = await server.seed(`CANARY_SECRET=${CANARY}`, ORIGIN);
+      const result = await call("pull_stub", { link, file });
+      expect(result).toMatchObject({ isError: true, body: { ok: false, code: "invalid" } });
+      expect(result.body.message).toContain("inside the project");
+      expect(server.sent).toEqual([]);
+      expect(server.store.size).toBe(1);
+    },
+  );
+
+  it("still writes to a nested path inside the project", async () => {
+    const link = await server.seed("A=1", ORIGIN);
+    await mkdir(join(cwd, "apps", "web"), { recursive: true });
+    expect((await call("pull_stub", { link, file: "apps/web/.env.local" })).body).toMatchObject({ ok: true });
+    expect(await readFile(join(cwd, "apps", "web", ".env.local"), "utf8")).toBe("A=1\n");
   });
 
   it("ignores extra arguments", async () => {

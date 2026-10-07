@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.0
+
+- No runtime dependencies. The MCP SDK and zod are bundled into `dist/stubs.js` at build time.
+  Before, installing the pinned package still resolved them (79 packages) with caret ranges at
+  install time, so the pin didn't cover what ran in the process holding the decrypted values.
+  Now it does.
+- `pull_stub` over MCP only writes inside the server's working directory. An absolute `file`,
+  or one that climbs above it with `..`, is refused before any network call. The CLI's `--to`
+  is unchanged.
+- `stubs pull -` and `stubs check -` read the link from stdin, keeping it out of the process
+  list and shell history.
+- The skill asks for the recipient's stubs id before `push` and says why: an unlocked link is
+  the secret itself.
+
 ## 0.2.0
 
 - `stubs skill install` installs a Stubs agent skill for Claude Code and Codex: when a stubs

@@ -1,6 +1,7 @@
 // R4: the same pull and check, as MCP tools on stdio. Tool results carry key names only, and
 // failures come back as results with isError, never as thrown errors.
 
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { CallToolResult, JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
@@ -44,7 +45,7 @@ const LINK_DESCRIPTION = "The stubs link, including everything after #.";
 const pullInput = z
   .object({
     link: z.unknown().describe(LINK_DESCRIPTION),
-    file: z.unknown().describe("Env file to write, relative to the project. Defaults to .env.local."),
+    file: z.unknown().describe("Env file to write, relative to and inside the project. Defaults to .env.local."),
     overwrite: z.unknown().describe("Replace values of keys that already exist instead of skipping them."),
   })
   .passthrough();
@@ -52,16 +53,30 @@ const checkInput = z.object({ link: z.unknown().describe(LINK_DESCRIPTION) }).pa
 
 type Args = Record<string, unknown>;
 
-function readPullArgs(args: Args): { link: string; file?: string; overwrite: boolean } | Failure {
+function readPullArgs(args: Args, cwd: string): { link: string; file?: string; overwrite: boolean } | Failure {
   const { link, file, overwrite } = args;
   if (typeof link !== "string" || link.trim() === "") return fail("invalid", "`link` must be a stubs link. Nothing was consumed.");
   if (file !== undefined && (typeof file !== "string" || file.trim() === "")) {
     return fail("invalid", "`file` must be a path relative to the project. Nothing was consumed.");
   }
+  if (file !== undefined && !insideProject(file, cwd)) {
+    return fail("invalid", "`file` must stay inside the project directory: no absolute paths and no `..`. Nothing was consumed.");
+  }
   if (overwrite !== undefined && typeof overwrite !== "boolean") {
     return fail("invalid", "`overwrite` must be true or false. Nothing was consumed.");
   }
   return { link, file, overwrite: overwrite ?? false };
+}
+
+/**
+ * An agent's env file belongs in its project. This is a lexical check on the path the client
+ * sent, so a caller can't aim the write at an arbitrary location; a symlink the user placed
+ * inside the project is their own choice and is left to the git guard.
+ */
+function insideProject(file: string, cwd: string): boolean {
+  if (isAbsolute(file)) return false;
+  const rel = relative(cwd, resolve(cwd, file));
+  return rel !== "" && rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
 }
 
 export function createMcpServer(deps: McpDeps): McpServer {
@@ -77,7 +92,7 @@ export function createMcpServer(deps: McpDeps): McpServer {
     },
     (args: Args) =>
       guarded(async () => {
-        const input = readPullArgs(args);
+        const input = readPullArgs(args, deps.cwd);
         if (isFailure(input)) return input;
         const origin = resolveOrigin(undefined, deps.env.STUBS_ORIGIN);
         if (isFailure(origin)) return origin;

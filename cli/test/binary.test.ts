@@ -280,8 +280,17 @@ describe("stubs binary", () => {
     const installed = await readFile(join(fakeHome, ".claude/skills/stubs/SKILL.md"), "utf8");
     const { stdout: shown } = await exec(process.execPath, [BIN, "skill", "show"], { cwd, env });
     expect(installed).toBe(shown);
-    expect(installed).toContain("npx -y @talix/stubs@0.2.0 pull");
+    expect(installed).toContain("npx -y @talix/stubs@0.3.0 pull");
     expect(await stat(realSkill).then((entry) => entry.mtimeMs, () => null)).toBe(before);
+  });
+
+  it("bundles every dependency, so the pinned version is the whole supply chain", async () => {
+    const bundle = await readFile(BIN, "utf8");
+    const specifiers = [...bundle.matchAll(/\b(?:from|import)\s*\(?\s*"([^"]+)"/g)].map((m) => m[1]!);
+    expect(specifiers.length).toBeGreaterThan(0);
+    expect(specifiers.filter((s) => !s.startsWith("node:"))).toEqual([]);
+    const pkg = JSON.parse(await readFile(join(ROOT, "cli/package.json"), "utf8"));
+    expect(pkg.dependencies).toBeUndefined();
   });
 
   it("exits 3 on an unknown flag", async () => {
