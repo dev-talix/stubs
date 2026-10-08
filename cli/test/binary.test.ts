@@ -278,6 +278,26 @@ describe("stubs run through the binary", () => {
     expect(result.stderr).toBe('err: "[stubs:OTHER]" [stubs:CANARY_SECRET]\n');
   });
 
+  it("masks lowercase URL encoding with plus spaces in both streams and keeps the exit code", async () => {
+    await writeFile(join(cwd, ".env.local"), "CANARY_SECRET='hunter2/+ phrase'\n");
+    const script = `
+      const encoded = encodeURIComponent(process.env.CANARY_SECRET)
+        .replace(/%[0-9A-F]{2}/g, (hex) => hex.toLowerCase()).replace(/%20/g, "+");
+      process.stdout.write("out: " + encoded.slice(0, 9));
+      process.stderr.write("err: " + encoded.slice(0, 12));
+      setTimeout(() => {
+        process.stdout.write(encoded.slice(9) + "\\n");
+        process.stderr.write(encoded.slice(12) + "\\n");
+        process.exitCode = 7;
+      }, 150);
+    `;
+    expect(await launched(BIN, ["run", "--", process.execPath, "-e", script])).toEqual({
+      code: 7,
+      stdout: "out: [stubs:CANARY_SECRET]\n",
+      stderr: "err: [stubs:CANARY_SECRET]\n",
+    });
+  });
+
   it.runIf(pty)("at a real terminal, masks a value written in two halves with a pause, and has no --unmasked", async () => {
     await writeFile(join(cwd, ".env.local"), `CANARY_SECRET=${CANARY}\n`);
     const halves = `

@@ -1,6 +1,6 @@
 {
   "name": "@talix/stubs",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "mcpName": "app.talix/stubs",
   "description": "Pull one-time .env stubs from stubs.talix.app into a project without ever printing the values.",
   "keywords": [

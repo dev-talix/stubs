@@ -84,6 +84,18 @@ describe("Masker", () => {
     expect(out.split("[stubs:TOKEN]")).toHaveLength(5);
   });
 
+  it.each([
+    "hunter2%2F%2B%20phrase",
+    "hunter2%2f%2b%20phrase",
+    "hunter2%2F%2B+phrase",
+    "hunter2%2f%2b+phrase",
+  ])("masks URL encoding %s across chunk boundaries", (encoded) => {
+    for (const size of [1, 2, 7, 1024]) {
+      const m = masker({ TOKEN: "hunter2/+ phrase" });
+      expect(stream(m, `before ${encoded} after`, size)).toBe("before [stubs:TOKEN] after");
+    }
+  });
+
   it("masks a value base64-encoded at any alignment, as in a Basic auth header", () => {
     const password = "correct-horse-battery";
     const m = masker({ DB_PASSWORD: password });

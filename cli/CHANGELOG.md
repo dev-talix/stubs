@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0
 
 - `stubs run -- <cmd>` runs a command with the env file's values in its environment and
   replaces every one of them in its output with `[stubs:KEY]`, so a tool that prints its config
@@ -35,6 +35,8 @@
   to share them on, and allows reading a `.env*` file only when the user explicitly asks.
 - A crash prints one fixed line instead of a stack trace, including uncaught exceptions,
   unhandled rejections, and closed output pipes.
+- URL masking covers upper- and lower-case percent escapes with either `%20` or `+` for
+  spaces, including encoded slashes and literal plus signs split across output writes.
 
 ## 0.3.0
 

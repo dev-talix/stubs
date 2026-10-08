@@ -43,9 +43,10 @@ export function needlesFor(key: string, value: string): Needle[] {
     }
   }
   const url = encodeURIComponent(value);
-  add(url);
-  add(url.replace(/%[0-9A-F]{2}/g, (hex) => hex.toLowerCase()));
-  add(url.replace(/%20/g, "+"));
+  for (const form of [url, url.replace(/%[0-9A-F]{2}/g, (hex) => hex.toLowerCase())]) {
+    add(form);
+    add(form.replace(/%20/g, "+"));
+  }
   for (const core of base64Cores(value)) add(core);
   return [...texts].map((text) => ({ bytes: Buffer.from(text, "utf8"), key }));
 }

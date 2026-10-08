@@ -81,13 +81,13 @@ commands for that:
 `run -- <cmd>` runs tests, dev servers, and scripts with those values and replaces every one of
 them in the output with `[stubs:KEY]`; `push` seals the file into a new link without printing
 it. It runs as a CLI or as an MCP server for Claude Code, Cursor, and Codex.
-A stub can also be locked to one machine: the recipient runs `npx -y --loglevel=warn -- @talix/stubs@0.3.0 init` once
+A stub can also be locked to one machine: the recipient runs `npx -y --loglevel=warn -- @talix/stubs@0.4.0 init` once
 and shares the id it prints; the sender pastes it into "Lock to a recipient". A locked link is
 useless without that machine's identity, so it's safe to leave in a chat with an agent.
 The simplest setup is the agent skill, which works across every project:
 
 ```bash
-npx -y --loglevel=warn -- @talix/stubs@0.3.0 skill install
+npx -y --loglevel=warn -- @talix/stubs@0.4.0 skill install
 ```
 
 Add `--protect` to also give Claude Code a permission rule that denies its file tools reading
@@ -95,9 +95,9 @@ Add `--protect` to also give Claude Code a permission rule that denies its file 
 this to a project's `AGENTS.md`:
 
 ```markdown
-When given a link on stubs.talix.app, run `npx -y --loglevel=warn -- @talix/stubs@0.3.0 pull <link>` (or the
+When given a link on stubs.talix.app, run `npx -y --loglevel=warn -- @talix/stubs@0.4.0 pull <link>` (or the
 `pull_stub` tool). It writes the values into `.env.local` and prints only the key names.
-Run anything that needs those values as `npx -y --loglevel=warn -- @talix/stubs@0.3.0 run -- <command>`, which
+Run anything that needs those values as `npx -y --loglevel=warn -- @talix/stubs@0.4.0 run -- <command>`, which
 masks them in the output. Never `cat`, read, or print `.env*` files unless the user asks.
 ```
 
