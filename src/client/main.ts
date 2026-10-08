@@ -1,6 +1,6 @@
 import "@fontsource/fragment-mono/400.css";
 import "./styles.css";
-import { track } from "./analytics";
+import { readAcquisition, track } from "./analytics";
 import { copyText } from "./copy";
 import { renderCreate } from "./create";
 import { renderReveal } from "./reveal";
@@ -32,13 +32,13 @@ for (const button of document.querySelectorAll<HTMLButtonElement>("button[data-c
 }
 
 function showCreatePage() {
+  // Read before the address bar is rewritten, which would drop the campaign tags.
+  const acquisition = readAcquisition(document.referrer, location.search, location.origin);
   if (location.pathname !== "/") history.replaceState(null, "", "/");
-  track({ event: "page_viewed", properties: { path: "/" } });
-  renderCreate(receipt!, announce, async (text, ttl, lockTo) => {
-    const outcome = await issueTicket(text, ttl, transport, location.origin, lockTo ? { lockTo } : {});
-    if (outcome.kind === "issued") track({ event: "stub_generated", properties: { ttl_seconds: ttl } });
-    return outcome;
-  });
+  track({ event: "page_viewed", properties: { path: "/", ...acquisition } });
+  renderCreate(receipt!, announce, (text, ttl, lockTo) =>
+    issueTicket(text, ttl, transport, location.origin, lockTo ? { lockTo } : {}),
+  );
 }
 
 if (location.pathname.replace(/\/+$/, "") === "/t") {
@@ -48,7 +48,8 @@ if (location.pathname.replace(/\/+$/, "") === "/t") {
     location.replace("/");
   } else {
     document.title = "A stub for you · Stubs";
-    // Captured above, so the key is already out of the address bar. Only the path is sent.
+    // Captured above, so the key is already out of the address bar. Only the path is sent:
+    // no referrer and no campaign tags, ever, for this page.
     track({ event: "page_viewed", properties: { path: "/t" } });
     let finished = false;
 

@@ -1,0 +1,4 @@
+/* Stylesheet for static pages (security.html) that load no script. main.ts imports the same two
+   files for the app. */
+@import "@fontsource/fragment-mono/400.css";
+@import "./styles.css";

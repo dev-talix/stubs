@@ -15,12 +15,20 @@ import {
 import { EVENTS_ROUTE, parseAnalyticsBatch } from "../shared/analytics";
 import { forwardToPostHog } from "./analytics";
 import { SecretBox } from "./secret-box";
+import { countUsage, usageSource, type RouteName, type Source } from "./usage";
 
 export { SecretBox };
 
 type JsonBody = ApiError | CreateTicketResponse | SealedTicket | TicketStatus;
 type BodyResult = { ok: true; value: unknown } | { ok: false; error: ApiErrorCode };
-type RouteContext = { env: Env; ctx: ExecutionContext; id: string; origin: string };
+type RouteContext = {
+  env: Env;
+  ctx: ExecutionContext;
+  id: string;
+  origin: string;
+  /** Who to count the request as in usage, or null if it opted out. */
+  source: Source | null;
+};
 type Route = {
   limiter: "CREATE_LIMITER" | "READ_LIMITER" | "EVENTS_LIMITER";
   handle: (body: unknown, route: RouteContext) => Promise<Response>;
@@ -34,16 +42,10 @@ const JSON_HEADERS = {
   "Strict-Transport-Security": "max-age=31536000",
 };
 
-const ROUTE_TABLE: Record<"create" | "status" | "claim" | "events", Route> = {
-  create: { limiter: "CREATE_LIMITER", handle: (body, { env }) => createTicket(body, env) },
-  status: {
-    limiter: "READ_LIMITER",
-    handle: (body, { env, id }) => readTicket(body, env, id, "status"),
-  },
-  claim: {
-    limiter: "READ_LIMITER",
-    handle: (body, { env, id }) => readTicket(body, env, id, "claim"),
-  },
+const ROUTE_TABLE: Record<RouteName, Route> = {
+  create: { limiter: "CREATE_LIMITER", handle: createTicket },
+  status: { limiter: "READ_LIMITER", handle: (body, route) => readTicket(body, route, "status") },
+  claim: { limiter: "READ_LIMITER", handle: (body, route) => readTicket(body, route, "claim") },
   events: { limiter: "EVENTS_LIMITER", handle: recordEvents },
 };
 
@@ -52,7 +54,10 @@ export default {
     try {
       return await handleRequest(request, env, ctx);
     } catch (error) {
-      console.error("ticket_api_error", error instanceof Error ? error.name : "Error");
+      const name = error instanceof Error ? error.name : "Error";
+      console.error("ticket_api_error", name);
+      const route = routeName(new URL(request.url).pathname) ?? "unknown";
+      countUsage(env.USAGE, { event: "worker_error", route, name });
       return apiError("internal");
     }
   },
@@ -69,20 +74,28 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
     return apiError("forbidden");
   }
 
-  const match = url.pathname.match(TICKET_ROUTE_PATTERN);
-  const action =
-    url.pathname === ROUTES.create ? "create" : url.pathname === EVENTS_ROUTE ? "events" : match?.[2];
-  if (action !== "create" && action !== "status" && action !== "claim" && action !== "events") {
-    return apiError("not_found");
-  }
+  const action = routeName(url.pathname);
+  if (!action) return apiError("not_found");
   if (request.method !== "POST") return apiError("method_not_allowed", { Allow: "POST" });
 
   const route = ROUTE_TABLE[action];
   const key = rateLimitKey(request.headers.get("CF-Connecting-IP"));
-  if (!(await env[route.limiter].limit({ key })).success) return apiError("rate_limited");
+  if (!(await env[route.limiter].limit({ key })).success) {
+    countUsage(env.USAGE, { event: "rate_limited", route: action });
+    return apiError("rate_limited");
+  }
   const body = await readJsonBody(request);
   if (!body.ok) return apiError(body.error);
-  return route.handle(body.value, { env, ctx, id: match?.[1] ?? "", origin: url.origin });
+  const id = url.pathname.match(TICKET_ROUTE_PATTERN)?.[1] ?? "";
+  const source = usageSource(request.headers);
+  return route.handle(body.value, { env, ctx, id, origin: url.origin, source });
+}
+
+function routeName(pathname: string): RouteName | null {
+  if (pathname === ROUTES.create) return "create";
+  if (pathname === EVENTS_ROUTE) return "events";
+  const action = pathname.match(TICKET_ROUTE_PATTERN)?.[2];
+  return action === "status" || action === "claim" ? action : null;
 }
 
 /** Accepts allowlisted analytics and forwards them in the background. Off-schema is a 400. */
@@ -95,23 +108,28 @@ async function recordEvents(body: unknown, { env, ctx, origin }: RouteContext): 
   return new Response(null, { status: 204, headers: JSON_HEADERS });
 }
 
-async function createTicket(body: unknown, env: Env): Promise<Response> {
+async function createTicket(body: unknown, { env, source }: RouteContext): Promise<Response> {
   const ticket = parseCreateTicketRequest(body);
   if (!ticket) return apiError("invalid_request");
   const { id, ...record } = ticket;
   const result = await getSecretBox(env, id).store(record);
-  return result === "exists" ? apiError("exists") : json(result, 201);
+  if (result === "exists") return apiError("exists");
+  if (source) countUsage(env.USAGE, { event: "ticket_created", source, ttlSeconds: ticket.ttlSeconds });
+  return json(result, 201);
 }
 
 async function readTicket(
   body: unknown,
-  env: Env,
-  id: string,
+  { env, id, source }: RouteContext,
   action: "status" | "claim",
 ): Promise<Response> {
   const proof = parseTicketProof(body);
   if (!proof || !PATTERNS.id.test(id)) return apiError("invalid_request");
   const result = await getSecretBox(env, id)[action](proof.claimSecret);
+  // Missing, expired, used, and wrong proof all count the same, just as they answer the same.
+  if (action === "claim" && source) {
+    countUsage(env.USAGE, { event: result ? "ticket_claimed" : "ticket_claim_unavailable", source });
+  }
   return result ? json(result, 200) : apiError("not_found");
 }
 

@@ -45,16 +45,32 @@ expiry, the server copy is deleted.
 
 ## Analytics
 
-Two events go to PostHog: a page was viewed (`/` or `/t`, path only) and a stub was generated
-(with its expiry). Nothing typed or pasted is read, there's no session replay or click capture,
-and visitors with Global Privacy Control or Do Not Track send nothing.
+The browser sends one event to PostHog: a page was viewed (`/` or `/t`, path only). Nothing
+typed or pasted is read, there's no session replay or click capture, and visitors with Global
+Privacy Control or Do Not Track send nothing.
+Page views on `/` also carry the referring site's domain (never its path) and any campaign tags,
+but `/t` never does.
 
 - The browser posts to this app's own `/api/events`, never to PostHog, so the CSP stays
   same-origin.
 - The Worker checks each event against the allowlist in `src/shared/analytics.ts`, rebuilds it,
   and adds the PostHog project key, which lives only as a Worker secret
   (`wrangler secret put POSTHOG_KEY`). Without the secret, events are accepted and dropped.
-- Each page load gets a random id held in memory: no cookies, no storage, no person profiles.
+- Each page load gets a random id held in memory, which PostHog also uses as the session id: no
+  cookies, no storage, no person profiles.
+
+The Worker also counts usage in Workers Analytics Engine (dataset `stubs_usage`). It counts
+stubs created (with the expiry), claims that opened a stub, and claims that found nothing, each
+by client: `web`, `cli` or `mcp`. The CLI and MCP server name themselves in an
+`X-Stubs-Client` header. Creates and claims sent with `Sec-GPC: 1` or `DNT: 1` aren't counted.
+
+It also counts Worker errors and rate-limited requests, and those are counted even with
+`Sec-GPC: 1` or `DNT: 1`. They carry no user data: an error is the event name, the route
+(`create`, `status`, `claim`, `events` or `unknown`) and the error name (like `TypeError`). A
+rate limit is the event name and the route. Neither records the client.
+
+No data point carries an id, link, key, claim secret, ciphertext, size, IP or user agent. See
+`src/worker/usage.ts`.
 
 ## For agents
 
@@ -110,7 +126,9 @@ Commands, exit codes, and MCP setup are in [cli/README.md](cli/README.md).
 | `src/client/` | Browser views, receipt screen, key custody, creation state |
 | `cli/` | `@talix/stubs`: CLI and MCP server for pulling stubs into a project |
 | `public/_headers` | CSP and security headers for static assets |
-| `src/llms.txt`, `scripts/sync-version.mjs` | Agent page template and the version sync for markdown docs |
+| `security.html`, `public/.well-known/security.txt` | The static `/security` page (no script) and the RFC 9116 contact file |
+| `cli/server.json` | MCP Registry entry for `@talix/stubs` (`mcpName` in `cli/package.json` must match its `name`) |
+| `src/llms.txt`, `scripts/sync-version.mjs` | Agent page template and the version sync for markdown docs and `cli/server.json` |
 | `test/worker/` | API and end-to-end tests inside workerd (`@cloudflare/vitest-pool-workers`) |
 | `test/client/`, `test/core/`, `test/shared/` | Client, core, and contract tests |
 
@@ -139,7 +157,8 @@ pnpm run deploy   # build, then wrangler deploy (plain `pnpm deploy` is pnpm's o
 ```
 
 The CLI version shown everywhere comes from `cli/package.json`: the site reads it at build
-time, and `pnpm sync-version` rewrites the literal pins in the markdown. To release, bump the
+time, and `pnpm sync-version` rewrites the literal pins in the markdown and both versions in
+`cli/server.json`. To release, bump the
 version there, run `pnpm sync-version`, add a CHANGELOG entry, publish from `cli/`, then
 deploy. `test/shared/pinned-version.test.ts` fails if anything still points at an old version.
 

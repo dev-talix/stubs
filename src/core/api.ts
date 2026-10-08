@@ -2,11 +2,13 @@
 // parsers, and each operation reports only the failures a caller can actually act on.
 
 import {
+  CLIENT_HEADER,
   ROUTES,
   parseApiError,
   parseCreateTicketResponse,
   parseSealedTicket,
   parseTicketStatus,
+  type Client,
   type CreateTicketRequest,
   type CreateTicketResponse,
   type SealedTicket,
@@ -16,6 +18,15 @@ import {
 
 /** fetch-shaped. Production passes `fetch`; tests pass the Worker or a fake. */
 export type Transport = (path: string, init: RequestInit) => Promise<Response>;
+
+/** Names the CLI or MCP server on every request, for the Worker's usage counts. */
+export function withClient(transport: Transport, client: Client): Transport {
+  return (path, init) => {
+    const headers = new Headers(init.headers);
+    headers.set(CLIENT_HEADER, client);
+    return transport(path, { ...init, headers });
+  };
+}
 
 export type Result<T, F extends string> = { ok: true; value: T } | { ok: false; failure: F };
 

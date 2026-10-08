@@ -4,6 +4,7 @@
 // exists to print: the link from `push` and the public id from `init`/`id`.
 
 import { parseArgs, type ParseArgsConfig } from "node:util";
+import { withClient } from "../../src/core/api";
 import type { Transport } from "../../src/core/ticket";
 import { checkStub, type CheckSuccess } from "./check";
 import { createIdentity, loadIdentity, type InitSuccess } from "./identity";
@@ -193,7 +194,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
 
   const origin = resolveOrigin(stringValue(values.origin), io.env.STUBS_ORIGIN);
   if (isFailure(origin)) return report(origin, json, out);
-  const transport = io.makeTransport(origin);
+  const transport = withClient(io.makeTransport(origin), "cli");
 
   if (command === "push") {
     if (positionals.length > 1) return report(fail("invalid", "push takes at most one file."), json, out);

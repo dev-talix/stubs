@@ -12,6 +12,8 @@ export interface FakeServer {
   store: Map<string, Stored>;
   /** Every request path and body, in order. */
   sent: string[];
+  /** The X-Stubs-Client header of every request through `transport`, in order. */
+  clients: (string | null)[];
   /** Claims get no response (the connection drops) after the server has processed them. */
   dropClaims: boolean;
   /** Answer everything with 429. */
@@ -36,10 +38,12 @@ export function fakeServer(): FakeServer {
   const server: FakeServer = {
     store: new Map(),
     sent: [],
+    clients: [],
     dropClaims: false,
     rateLimited: false,
     onClaim: null,
     transport: async (path, init) => {
+      server.clients.push(new Headers(init.headers).get("X-Stubs-Client"));
       const reply = await handle(path, String(init.body));
       if (reply === "drop") throw new TypeError("fetch failed");
       return new Response(JSON.stringify(reply.body), { status: reply.status });
@@ -48,6 +52,7 @@ export function fakeServer(): FakeServer {
       const issued = await issueTicket(text, 3600, server.transport, origin, lockTo ? { lockTo } : {});
       if (issued.kind !== "issued") throw new Error(issued.reason);
       server.sent.length = 0;
+      server.clients.length = 0;
       return issued.link;
     },
     tamperAll() {

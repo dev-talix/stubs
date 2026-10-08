@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#1c1b19" />
+    <title>Security · Stubs</title>
+    <meta name="description" content="How Stubs encrypts .env values, what the server stores and for how long, and what it doesn't protect against." />
+    <link rel="canonical" href="https://stubs.talix.app/security" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Stubs" />
+    <meta property="og:url" content="https://stubs.talix.app/security" />
+    <meta property="og:title" content="Security · Stubs" />
+    <meta property="og:description" content="How Stubs encrypts .env values, what the server stores and for how long, and what it doesn't protect against." />
+    <meta property="og:image" content="https://stubs.talix.app/og.png" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <!-- Styles only. This page runs no JavaScript. -->
+    <link rel="stylesheet" href="/src/client/page.css" />
+  </head>
+  <body>
+    <div class="desk">
+      <header class="desk-bar">
+        <a class="wordmark" href="/">stubs</a>
+        <span>one-time .env links</span>
+      </header>
+
+      <main class="machine">
+        <div class="printer" aria-hidden="true"><span class="slot"></span></div>
+        <div class="paper">
+          <article class="receipt doc">
+            <header class="receipt-head">
+              <h1 class="brand">SECURITY</h1>
+              <p class="receipt-meta"><span>HOW STUBS WORKS</span><span>AND WHERE IT STOPS</span></p>
+            </header>
+
+            <p class="lede">
+              What Stubs does with your .env values, what the server keeps, and what it doesn't
+              protect against. Everything here describes code that runs on stubs.talix.app or in
+              the <code>@talix/stubs</code> CLI.
+            </p>
+
+            <hr class="rule" />
+
+            <section aria-labelledby="encryption">
+              <h2 id="encryption">Encryption happens on your machine</h2>
+              <p>
+                The browser, or the CLI, does all of the cryptography. The server never receives
+                anything that could decrypt a stub.
+              </p>
+              <ul>
+                <li>
+                  It draws a random 256-bit key with <code>crypto.getRandomValues</code> and puts
+                  it in the link after the <code>#</code>: <code>/t#v1.&lt;key&gt;</code>. Browsers
+                  don't send the part after <code>#</code> to any server, and the CLI never sends
+                  it either.
+                </li>
+                <li>
+                  HKDF-SHA256 turns that key into three values: a 128-bit storage id, an
+                  AES-GCM-256 key, and a 256-bit claim secret.
+                </li>
+                <li>
+                  The .env text is encrypted with AES-GCM under a fresh random IV. The storage id
+                  is bound in as associated data, so ciphertext can't be moved to another id.
+                </li>
+                <li>
+                  The server receives the id, a SHA-256 hash of the claim secret, the ciphertext,
+                  the IV, and how long to keep it.
+                </li>
+              </ul>
+              <p>
+                To check or open a stub, the client sends the claim secret. The server hashes it
+                and compares it with the stored hash in constant time. Only the link can produce
+                the claim secret, so the id on its own (it appears in request logs) can't check,
+                open, or burn a stub. A wrong secret gets the same answer as a stub that doesn't
+                exist, and changes nothing.
+              </p>
+              <p>
+                A stub opens once. The server checks the secret, deletes the ciphertext, and
+                returns it in one step that holds a lock on that stub's storage, so two people
+                opening it at the same moment can't both get it. The client then decrypts it
+                locally. If the ciphertext was altered, decryption fails and the stub is reported
+                as tampered. It's void by then.
+              </p>
+              <p>
+                On the web page, loading a link only checks its status. Revealing takes a click,
+                so chat link previews can't burn a stub. The page takes the key out of the address
+                bar as soon as it loads. The API refuses cross-site requests, so another website
+                can't make your browser burn one.
+              </p>
+            </section>
+
+            <hr class="rule" />
+
+            <section aria-labelledby="storage">
+              <h2 id="storage">What the server stores</h2>
+              <p>Each stub lives in its own Cloudflare Durable Object, named by the storage id. It holds:</p>
+              <ul>
+                <li>the SHA-256 hash of the claim secret</li>
+                <li>the ciphertext (at most 32 KB of .env text before encryption) and its IV</li>
+                <li>the lifetime the sender picked, and the expiry time</li>
+              </ul>
+              <p>
+                The sender picks how long a stub stays valid: 5 minutes, 1 hour (the default),
+                1 day, or 7 days. An alarm deletes everything at expiry.
+              </p>
+              <p>
+                When a stub is opened, everything but the expiry time is deleted at once. The
+                expiry time stays so the id can't be reused before then, and the alarm removes
+                that too.
+              </p>
+              <p>
+                SQLite-backed Durable Objects keep 30 days of point-in-time recovery. In that
+                window, whoever controls the Cloudflare account could restore deleted ciphertext.
+                It's useless without the key, which never reached the server.
+              </p>
+              <p>
+                The Worker doesn't log ids, keys, claim secrets, or ciphertext. When something
+                fails, it logs the error's type, or the HTTP status if forwarding analytics fails,
+                and nothing else. Cloudflare still sees each
+                request's IP address and path, and the path of a check or open includes the
+                storage id. The Worker uses the IP only as a rate-limit key: 30 creates and 120
+                checks or opens per client per minute, per Cloudflare location. IPv6 clients are
+                counted per /64.
+              </p>
+            </section>
+
+            <hr class="rule" />
+
+            <section aria-labelledby="lock">
+              <h2 id="lock">Locking a stub to one machine</h2>
+              <p>An ordinary link works for anyone who has it. A locked link opens on one machine only.</p>
+              <ul>
+                <li>
+                  The recipient runs <code>npx -y @talix/stubs@{{STUBS_CLI_VERSION}} init</code>
+                  once. It creates an X25519 key pair in <code>~/.config/stubs/identity</code>, or
+                  under <code>$XDG_CONFIG_HOME/stubs/</code> if that's set (file mode 0600, folder
+                  0700), and prints a public id that starts with
+                  <code>stubs1</code>.
+                </li>
+                <li>
+                  The sender pastes that id into "Lock to a recipient" on the site, or runs
+                  <code>stubs push --to &lt;id&gt;</code>.
+                </li>
+                <li>
+                  The link then carries the stub's key wrapped to that public key: an ephemeral
+                  X25519 key exchange, HKDF-SHA256, then AES-GCM. Only <code>stubs pull</code> on
+                  the machine holding the private key can unwrap it.
+                </li>
+              </ul>
+              <p>
+                This protects against the link leaking. A locked link can sit in a chat, an issue,
+                an agent's transcript, or browser history, and whoever copies it still can't open,
+                check, or burn the stub. The server stores a locked stub exactly like an unlocked
+                one and can't tell them apart.
+              </p>
+              <p>
+                It doesn't protect against someone who can read the identity file. Like an SSH
+                key, it relies on file permissions and has no passphrase. Browsers can't open
+                locked stubs; only the CLI can.
+              </p>
+            </section>
+
+            <hr class="rule" />
+
+            <section aria-labelledby="agents">
+              <h2 id="agents">Keeping values away from agents</h2>
+              <p>
+                The CLI and its MCP server let an agent move a stub into a project without the
+                values entering its context.
+              </p>
+              <ul>
+                <li>
+                  <code>stubs pull &lt;link&gt;</code> writes the values into
+                  <code>.env.local</code> (or <code>--to &lt;file&gt;</code>) and prints only the
+                  key names. No flag prints a value, and no error message includes one. The values
+                  go to a temp file that's renamed into place, with mode 0600 (or the existing
+                  file's mode, if that's stricter). If that write fails after the stub is opened,
+                  the values are saved to a 0600 file under the stubs config folder instead, and
+                  the error names that file.
+                </li>
+                <li>
+                  Pull and check output, every error, and every MCP tool result go through one
+                  redaction step (<code>cli/src/redact.ts</code>). It blanks URLs, link fragments,
+                  base64url runs of 43 or more characters, and public ids, so a link passed where a
+                  path was expected can't come back in an error. A few commands skip it for the
+                  thing they exist to print: <code>push</code> prints the new link (and the id it's
+                  locked to), <code>init</code> and <code>id</code> print this machine's public id,
+                  and <code>skill show</code> prints the skill. None of them prints a value.
+                </li>
+                <li>
+                  The git guard runs before the stub is opened. If git would track the target
+                  file, <code>pull</code> exits 5 and says what to add to
+                  <code>.gitignore</code>. If git can't answer inside what looks like a
+                  repository, it refuses rather than guess.
+                </li>
+                <li>
+                  <code>stubs pull -</code> reads the link from stdin, which keeps it out of the
+                  process list and shell history.
+                </li>
+                <li>
+                  The MCP server has <code>pull_stub</code> and <code>check_stub</code> and no push
+                  tool. <code>pull_stub</code> refuses absolute paths and <code>..</code>, so the
+                  path it's given has to stay inside the project. That's a check on the path as
+                  written. A symlink you put in the project is followed, even if it points
+                  outside, and the git guard then checks the file it points to.
+                </li>
+                <li>
+                  Every command the site and docs show pins an exact CLI version, so
+                  <code>npx</code> never picks up a newer release on its own.
+                </li>
+              </ul>
+              <p>
+                The CLI can't stop an agent from reading the file afterwards. The agent skill and
+                the suggested AGENTS.md line tell agents never to read or print
+                <code>.env*</code> files.
+              </p>
+            </section>
+
+            <hr class="rule" />
+
+            <section aria-labelledby="threats">
+              <h2 id="threats">Threat model</h2>
+              <p>Stubs is built so that:</p>
+              <ul>
+                <li>the server, and anyone who reads its storage or logs, can't learn the values</li>
+                <li>someone who knows a stub's id but not its link can't check, open, or burn it</li>
+                <li>link previews and unfurlers can't burn a stub</li>
+                <li>two people can't both open the same stub</li>
+                <li>
+                  links can't be guessed: each carries a fresh 256-bit key, and every guess goes
+                  through the rate-limited server
+                </li>
+                <li>altered ciphertext fails to decrypt instead of producing wrong values</li>
+                <li>a locked link is useless to anyone but the recipient's machine</li>
+              </ul>
+            </section>
+
+            <hr class="rule" />
+
+            <section aria-labelledby="limits">
+              <h2 id="limits">What it doesn't protect against</h2>
+              <ul>
+                <li>
+                  A dropped response. Opening is single-phase: the server deletes the stub before
+                  its answer reaches you. If the connection drops at that moment, the stub is gone
+                  and nobody has the values. The CLI exits 7 ("uncertain") and tells you to run
+                  the same command again, which either pulls the values or reports the stub as
+                  void. If it's void, ask the sender for a new link. A grace window would fix this
+                  but weaken the one-time guarantee.
+                </li>
+                <li>
+                  A leaked unlocked link. Until it's opened, an unlocked link is a bearer token:
+                  anyone who has it can open it first, wherever it was sent and in the recipient's
+                  browser history. Lock the stub to the recipient's machine to close this.
+                </li>
+                <li>
+                  Tools that print their environment. A tool that prints its environment on error
+                  can leak a value into an agent's transcript. Work on this is in progress.
+                </li>
+                <li>
+                  A compromised machine on either end. Malware, or a browser extension that can
+                  read the page, sees the values when they're decrypted.
+                </li>
+                <li>
+                  Changed site code. The web page runs whatever JavaScript stubs.talix.app serves.
+                  If that code were changed, it could read the key. The CLI runs a pinned version
+                  from npm instead.
+                </li>
+                <li>
+                  Session restore. Until an unlocked stub is opened, its link is kept in the tab's
+                  session storage so a refresh works. Browsers can write session storage to disk.
+                  It's removed once the stub is opened or found void.
+                </li>
+                <li>
+                  An untrusted project. <code>npx</code> prefers a matching package already in the
+                  project's <code>node_modules</code>. In a checkout you don't trust, install the
+                  CLI globally and run <code>stubs</code> from your PATH.
+                </li>
+                <li>
+                  Metadata. The server knows when a stub was created and opened, when it expires,
+                  and the ciphertext's length, which tracks the .env's length. Anyone with an id
+                  can tell whether a stub under it exists and hasn't expired, because creating
+                  another one with that id is refused.
+                </li>
+              </ul>
+            </section>
+
+            <hr class="rule" />
+
+            <section aria-labelledby="analytics">
+              <h2 id="analytics">Analytics</h2>
+              <p>
+                Stubs counts usage without recording anything that identifies a stub or what's in
+                it. There are no cookies and no session replay.
+              </p>
+              <ul>
+                <li>
+                  The browser sends one kind of event to this site's own
+                  <code>/api/events</code>: a page view for <code>/</code> or <code>/t</code>, with
+                  the path only. It never sends the link, the key, or anything typed or pasted.
+                </li>
+                <li>
+                  On <code>/</code>, the page view also carries the referring site's domain (never
+                  its path) and, if the link had them, <code>utm_source</code>,
+                  <code>utm_medium</code>, and <code>utm_campaign</code>. No other part of the
+                  address is sent, and <code>/t</code> never sends any of it.
+                </li>
+                <li>
+                  The Worker checks each event against a fixed allowlist, rebuilds it, and
+                  forwards it to PostHog. Each page load gets a random id that's kept in memory
+                  only, and PostHog uses it as the session id. PostHog is told not to build person
+                  profiles or look up location.
+                </li>
+                <li>The browser sends nothing if Global Privacy Control or Do Not Track is on.</li>
+                <li>
+                  The Worker counts stub creates (with the lifetime picked) and claims (opened or
+                  found nothing) in Cloudflare Workers Analytics Engine, by client: web, cli, or
+                  mcp. The CLI and MCP server send no events of their own. They only name
+                  themselves in an <code>X-Stubs-Client</code> header. Creates and claims sent
+                  with Global Privacy Control or Do Not Track aren't counted.
+                </li>
+                <li>
+                  It also counts Worker errors (route and error type) and rate-limited requests
+                  (route), even with Global Privacy Control or Do Not Track on, since they say
+                  nothing about who sent them.
+                </li>
+                <li>
+                  None of these counts carries an id, link, key, claim secret, ciphertext, size,
+                  IP, or user agent.
+                </li>
+                <li>This page runs no JavaScript and sends nothing.</li>
+              </ul>
+            </section>
+
+            <hr class="rule" />
+
+            <section aria-labelledby="report">
+              <h2 id="report">Reporting a vulnerability</h2>
+              <p>
+                Email <a href="mailto:security@talix.app">security@talix.app</a>. Say what you
+                found, how to reproduce it, and what an attacker could do with it. Test only with
+                stubs you created yourself, and please don't publish details before a fix is out.
+                The same contact is in
+                <a href="/.well-known/security.txt">/.well-known/security.txt</a>.
+              </p>
+            </section>
+          </article>
+        </div>
+      </main>
+
+      <footer class="desk-foot">
+        <nav class="foot-links" aria-label="Site">
+          <a href="/">Make a stub</a>
+          <a href="/llms.txt">llms.txt</a>
+          <a href="/.well-known/security.txt">security.txt</a>
+        </nav>
+      </footer>
+    </div>
+  </body>
+</html>

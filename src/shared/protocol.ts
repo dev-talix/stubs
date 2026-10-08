@@ -51,6 +51,14 @@ export const ROUTES = {
 /** Matches status and claim paths; group 1 is the id, group 2 the action. */
 export const TICKET_ROUTE_PATTERN = /^\/api\/tickets\/([^/]+)\/(status|claim)$/;
 
+/**
+ * The CLI and its MCP server name themselves in this header so the Worker can count usage by
+ * client. The browser never sends it. Any other value counts as the web.
+ */
+export const CLIENT_HEADER = "X-Stubs-Client";
+export const CLIENTS = ["cli", "mcp"] as const;
+export type Client = (typeof CLIENTS)[number];
+
 // ---------- Payloads ----------
 
 /** POST /api/tickets */

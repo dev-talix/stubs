@@ -6,6 +6,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { CallToolResult, JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import { withClient } from "../../src/core/api";
 import type { Transport } from "../../src/core/ticket";
 import { checkStub } from "./check";
 import { resolveOrigin } from "./links";
@@ -81,6 +82,7 @@ function insideProject(file: string, cwd: string): boolean {
 
 export function createMcpServer(deps: McpDeps): McpServer {
   const server = new McpServer({ name: "stubs", version: packageVersion() });
+  const makeTransport = (origin: string) => withClient(deps.makeTransport(origin), "mcp");
 
   server.registerTool(
     "pull_stub",
@@ -98,7 +100,7 @@ export function createMcpServer(deps: McpDeps): McpServer {
         if (isFailure(origin)) return origin;
         return pullStub(
           { link: input.link, origin, to: input.file, overwrite: input.overwrite },
-          { transport: deps.makeTransport(origin), cwd: deps.cwd, identity: deps },
+          { transport: makeTransport(origin), cwd: deps.cwd, identity: deps },
         );
       }),
   );
@@ -117,7 +119,7 @@ export function createMcpServer(deps: McpDeps): McpServer {
         }
         const origin = resolveOrigin(undefined, deps.env.STUBS_ORIGIN);
         if (isFailure(origin)) return origin;
-        return checkStub({ link: args.link, origin }, { transport: deps.makeTransport(origin), identity: deps });
+        return checkStub({ link: args.link, origin }, { transport: makeTransport(origin), identity: deps });
       }),
   );
 
