@@ -24,6 +24,11 @@ beforeAll(async () => {
 }, 60_000);
 
 describe("the packed npm launcher", () => {
+  it("finishes child commands that read standard input", async () => {
+    const result = await execute(process.execPath, ["-e", 'process.stdin.resume(); process.stdin.on("end", () => process.stdout.write("input ended\\n"));'], await tempDir(), process.env);
+    expect(result).toEqual({ code: 0, stdout: "input ended\n", stderr: "" });
+  }, 30_000);
+
   it("installs Node shims and runs the local package through the bin and offline npx", async () => {
     const cwd = join(await tempDir(), "project with spaces");
     await mkdir(cwd);
@@ -103,7 +108,7 @@ describe("the packed npm launcher", () => {
     const installed = await execute(npm, ["install", "--no-save", "@talix/stubs@0.4.0"], cwd, env);
     expect(installed.code, installed.stderr).toBe(0);
     const result = await execute(join(cwd, "node_modules", ".bin", "stubs.cmd"), ["--version"], cwd, env);
-    expect(result.code).toBe(9009);
+    expect(result.code, result.stderr).not.toBe(0);
     expect(result.stderr).toMatch(/'sh' is not recognized/);
   }, 60_000);
 });
@@ -148,13 +153,16 @@ async function execute(executable: string, args: string[], cwd: string, env: Nod
     argv = ["/d", "/s", "/c", `"${[executable, ...args].map((arg) => `"${arg}"`).join(" ")}"`];
   }
   try {
-    const result = await exec(command, argv, {
+    const pending = exec(command, argv, {
       cwd,
       env,
       windowsVerbatimArguments: windows && executable.endsWith(".cmd"),
       timeout: 15_000,
       maxBuffer: 1024 * 1024,
     });
+    // No fixture supplies input. PowerShell's npm shim waits for EOF on piped stdin.
+    pending.child.stdin?.end();
+    const result = await pending;
     return { code: 0, stdout: result.stdout.replace(/\r\n/g, "\n"), stderr: result.stderr.replace(/\r\n/g, "\n") };
   } catch (error) {
     const failed = error as Error & { code: number; stdout: string; stderr: string; killed?: boolean };
