@@ -15,6 +15,12 @@
   the default `.env.local`. Dangling file symlinks are refused without replacing them.
   Symlinks within the project still work. The CLI's user-chosen `--to` targets are unchanged.
 
+- npm launchers on Windows invoke `node --` directly, so `stubs` no longer requires `sh`
+  in cmd.exe or PowerShell. The early `--` still stops Node loading startup flags passed
+  to Stubs. Direct Unix execution now requires `/usr/bin/env -S`, such as GNU coreutils
+  8.30 or later. With an older or minimal `env`, use `node --` before the installed script
+  path. Packed-package launcher tests and CI cover Linux, macOS, and Windows.
+
 ## 0.4.0
 
 - `stubs run -- <cmd>` runs a command with the env file's values in its environment and
