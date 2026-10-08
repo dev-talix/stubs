@@ -87,8 +87,7 @@ export function createMcpServer(deps: McpDeps): McpServer {
   server.registerTool(
     "pull_stub",
     {
-      description:
-        "Open a one-time Stubs link and write its values into the project's env file. Returns key names only. Never read or print the env file afterwards.",
+      description: `Open a one-time Stubs link and write its values into the project's env file. Returns key names only. Never read or print the env file afterwards; run commands that need the values with \`npx -y -- @talix/stubs@${packageVersion()} run -- <cmd>\`, which masks them in the output.`,
       inputSchema: pullInput,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },

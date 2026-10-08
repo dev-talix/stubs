@@ -1,5 +1,40 @@
 # Changelog
 
+## Unreleased
+
+- `stubs run -- <cmd>` runs a command with the env file's values in its environment and
+  replaces every one of them in its output with `[stubs:KEY]`, so a tool that prints its config
+  on error leaves the placeholder in an agent's transcript, not the secret. Values are caught
+  across write boundaries with any pause between them, and in their JSON-escaped (including
+  `\u00e4`-style), URL-encoded, and base64 forms. Every value in the file is masked, including
+  a key set twice. Values shorter than 6 characters aren't masked. There is no flag that shows
+  the values. A key that changes which code programs run (`LD_*`, `NODE_*`, `GIT_*`,
+  `npm_config_*`, `ZDOTDIR`, and the rest of the list in the README) or one the environment
+  already sets to a different value stops the run with exit 125. Another file is read with
+  `--from`, not `--env-file`, which Node would read itself before `stubs` starts; the `stubs`
+  executable is now a one-line sh launcher that execs `node -- stubs.js`, so an `--env-file`
+  typo is refused before Node can read the file on direct, npm bin, global npm, and `pnpm dlx`
+  launches. Npx needs an early separator: use `npx -y --` before the pinned package name.
+  Plain npx without that `--`, and raw `node dist/stubs.js`, are unprotected. On Windows
+  without `sh`, use `node -- dist/stubs.js` with the installed path. The command
+  runs in its own process group, which `run` manages: forwarded signals, leftovers when the
+  command exits, and a reader going away all end in `SIGKILL` for anything still there a
+  second later, and the run returns once the group is empty; a crash in `stubs` kills the
+  group on the way out. A descendant that starts its own session is out of reach and the docs
+  say so. Messages from `run` never repeat the command or a file name.
+- `stubs skill install --protect` adds Claude Code permission rules that deny its file tools
+  reading `.env` and `.env.*` files and the stubs config folder. Opt-in; it reports what it
+  added, refuses a settings file it can't parse, one with a `Read(!...)` exception after a
+  stubs rule, or a `settings.json` symlink whose target is missing, and says so.
+- The docs say what this protects and what it doesn't: values stay out of logs and transcripts
+  by accident; an agent that sets out to read them still can.
+- `skill install` honours `CLAUDE_CONFIG_DIR` for the Claude Code skill folder, as it already
+  did `CODEX_HOME` for Codex.
+- The skill now routes every command that needs the values through `run`, says `push` is how
+  to share them on, and allows reading a `.env*` file only when the user explicitly asks.
+- A crash prints one fixed line instead of a stack trace, including uncaught exceptions,
+  unhandled rejections, and closed output pipes.
+
 ## 0.3.0
 
 - No runtime dependencies. The MCP SDK and zod are bundled into `dist/stubs.js` at build time.

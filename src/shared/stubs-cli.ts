@@ -9,4 +9,4 @@
 import { version } from "../../cli/package.json";
 
 export const STUBS_CLI_VERSION: string = version;
-export const NPX_STUBS = `npx -y @talix/stubs@${STUBS_CLI_VERSION}`;
+export const NPX_STUBS = `npx -y -- @talix/stubs@${STUBS_CLI_VERSION}`;

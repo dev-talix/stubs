@@ -5,8 +5,11 @@ traces to the numbered requirements here.
 
 ## Goal
 
-An agent handed a stubs link moves the values into the project without ever seeing them. The
-values never enter the agent's context, its transcript, its logs, or any tool output.
+An agent handed a stubs link moves the values into the project, uses them, and passes them on
+without the values landing in its context, its transcript, its logs, or any tool output by
+accident: not from the CLI, and not from the commands the agent runs with them. That's the
+scope of this version. An agent running arbitrary code as the user can still read the file;
+keeping the values out of its reach altogether is TAL-142.
 
 ## Package
 
@@ -88,7 +91,9 @@ name `stubs`. Tools:
 
 - `pull_stub` — input `{link: string, file?: string, overwrite?: boolean}`; output is the R1
   JSON object. Description: "Open a one-time Stubs link and write its values into the
-  project's env file. Returns key names only. Never read or print the env file afterwards."
+  project's env file. Returns key names only. Never read or print the env file afterwards;
+  run commands that need the values with `npx -y -- @talix/stubs@0.3.0 run -- <cmd>`, which
+  masks them in the output."
 - `check_stub` — input `{link: string}`; output is the R2 JSON object.
 
 No `push` tool. File paths resolve against the server's working directory. The server inherits
@@ -117,6 +122,157 @@ error object, never thrown.
   Every string that reaches stdout, stderr, or an MCP result passes one redaction step that
   blanks fragments, URLs, 43-character base64url runs, and public ids, so a link passed where
   a path or flag was expected can't be echoed by a Node or argument-parser error.
+- A crash never prints a stack trace or an error message: the entry point handles rejected
+  promises, uncaught exceptions, unhandled rejections, and stream errors with one fixed line.
+  An error object could carry anything the command was holding.
+- Error messages name keys and paths only. Malformed lines in an env file are reported by line
+  number, never by content, since the content may hold part of a value.
+
+### R12 `stubs run [--from <file>]... -- <cmd> [args...]`
+
+After a pull, the agent runs tests, dev servers, and scripts. Many tools print their config or
+environment on error, so the pulled values would land in the transcript anyway (TAL-141).
+`run` is the layer between the command and whoever reads its output.
+
+1. Everything after `--` is the command. Flags before it belong to `stubs`; a flag after it
+   (including `--json` and `--help`) goes to the command. Without `--`, a flag the command
+   needs is an argument error whose message says to add `--`.
+2. Reads `--from` (default `.env.local`, repeatable) with `parseDotenv`. Not `--env-file`:
+   Node 22 scans the whole command line for that flag until `--` and loads the file before
+   any CLI code runs, `NODE_OPTIONS` included. Two layers: `--env-file`
+   and `--env-file-if-exists` (space or `=`) are refused with a message naming `--from`, and
+   the shipped `dist/stubs.js` starts with a sh/JS polyglot launcher (`cli/build.mjs`) that
+   execs `node -- stubs.js "$@"`, so Node's scan stops before our arguments on every launch
+   that goes through the executable: the direct executable, the npm bin link, a global npm
+   install, and `pnpm dlx`. Npx needs its own early separator:
+   `npx -y -- @talix/stubs@0.3.0 run -- <cmd>`. Plain npx without that `--` is unprotected:
+   the Node process running npx can load the file and execute its hooks before our launcher
+   starts. Raw `node dist/stubs.js` is also unprotected because it skips the launcher.
+   Windows shims from npm's `cmd-shim` read the shebang and run `sh stubs.js`, which needs
+   `sh` on `PATH`, as in Git Bash or WSL. Without `sh`, use `node -- dist/stubs.js` with the
+   installed script path. The `--` before that path stops Node's scan. A missing file is an
+   error, not an empty run: the agent should pull first. A key the environment already sets
+   to a different value stops the run (exit `125`, keys named): two sources of truth. The same
+   value is fine. Keys matched by the refusal list in `cli/src/run.ts` (prefixes `LD_`,
+   `DYLD_`, `NODE_` except `NODE_ENV`, `NPM_CONFIG_`, `YARN_`, `PNPM_`, `BUN_`, `PYTHON`,
+   `PERL`, `RUBY`, `GEM_`, `BUNDLE_`, `GIT_`, `JAVA_`, `_JAVA_`, `JDK_JAVA_`, `DOTNET_`,
+   `XDG_`; names `PATH`, `HOME`, `SHELL`, `ENV`, `BASH_ENV`, `ZDOTDIR`, `SHELLOPTS`,
+   `BASHOPTS`, `IFS`, `PS4`, `PROMPT_COMMAND`, `CDPATH`, `CLASSPATH`, `PAGER`, `MANPAGER`,
+   `EDITOR`, `VISUAL`, `BROWSER`, `LESSOPEN`, `LESSCLOSE`; case-insensitive) stop the run the
+   same way, so a hostile stub can't use `GIT_CONFIG_*`, `npm_config_node_options`, or
+   `ZDOTDIR` to make the command run its code. It's a blocklist, so it closes the known hooks,
+   not every possible one.
+3. Spawns the command with stdin inherited and stdout and stderr piped through a masker, one
+   per stream, into this process's stdout and stderr. On POSIX the command gets its own
+   process group (`detached`), which also drops its controlling terminal. That group is what
+   `run` manages; a descendant that calls `setsid` leaves it and is out of reach. Nothing is
+   written to disk.
+4. Masking (`cli/src/mask.ts`): every value of 6 or more characters anywhere in the files
+   (every pair, including a key set twice, plus the values `pull` kept as comments and the text
+   of lines the parser can't read) is replaced by `[stubs:KEY]`. Each value is also searched
+   for JSON-escaped (JavaScript style, and with non-ASCII as `\uXXXX` in lower and upper
+   case), URL-encoded (upper and lower-case hex, and `+` for spaces), base64 and base64url at
+   all three byte alignments (the characters that depend only on the value's bytes, plus the
+   padded tail for a value that ends the string), and line by line for multi-line values.
+   Matching is on bytes, longest value first, so binary output passes through and a value that
+   starts with another value wins. A chunk whose tail could be the start of a value is held
+   until the next chunk decides or the stream ends; the held tail is never longer than the
+   longest value, and no timer releases it, since a timer is a way to get a value out in two
+   halves. The JSON forms are exactly: JavaScript's; non-ASCII as lower-case `\uXXXX`
+   (Python's `json.dumps`); Go's default, which escapes `<`, `>`, `&`, U+2028 and U+2029 and
+   keeps other non-ASCII; and each of those with upper-case hex digits. Tests cover each and
+   assert that a form escaping quotes numerically (as .NET's default encoder does) is not
+   covered; the docs say the same. Values shorter than 6 characters aren't masked: documented as not protected. Greedy
+   left-to-right matching means that when one value's tail overlaps another's head in the
+   output, the second one's remainder can show: documented.
+5. Exit code is the command's own; a signal exits `128 + signal number`. `SIGINT`, `SIGTERM`,
+   and `SIGHUP` are forwarded to the command's process group, and each arms `SIGKILL` for the
+   group one second later, so a command that ignores the signal still ends (exit `137`). When
+   the command exits, the group gets `SIGTERM` and the same `SIGKILL` deadline, and the run
+   polls `kill(-pgid, 0)` until the group is empty before returning, so a leftover without
+   pipes can't outlive it. `close` waits for the output pipes, which a descendant in another
+   session can hold forever. So after exit the run waits a second and a half at a time, and
+   gives up only when nothing is queued anywhere in the relays (source buffer, masker,
+   sink buffer, sink needing drain): output backed up behind a slow reader keeps the wait
+   going until it's delivered. A detached process that escaped the group and keeps writing
+   will keep `run` waiting until it stops, because run never cuts output silently. The timer
+   is cleared when `close` wins so a short command returns at once. Giving up closes the
+   pipes from this side, settles both relays (each is a
+   race against an "abandoned" promise, so nothing is left pending and `main.ts` always gets
+   a code), drops a held tail, warns with a fixed line, and exits with the command's code, or
+   `125` if that was `0`. Every relay failure stops the group first; `EPIPE` (the reader went
+   away) then exits `141`, as a shell reports a writer killed by `SIGPIPE`, and any other
+   error is rethrown once the group is gone, so it reaches the fixed-line crash path (exit
+   `1`) even when the command handled its output error and ignored `SIGTERM`. A `process.on("exit")`
+   handler kills the group with `SIGKILL`, so the crash path in `main.ts` (`process.exit(1)`)
+   takes the command with it. Following `env(1)`: `125` when `stubs` failed before or while
+   starting the command, `126` when it isn't executable, `127` when it isn't found. No
+   `--json`.
+6. No flag turns masking off. A TTY check was tried and rejected: `pty.fork` passes it, so it
+   isn't consent. A person who wants the values opens the file.
+7. Messages from `run` are fixed text plus key names. The command, its arguments, and the
+   `--from` paths are never echoed (a nonexistent command named after a value would leak it);
+   files are called `.env.local` (a constant) or `the --from file` / `--from file number N`.
+8. Tests feed canary values through the built binary and the in-process CLI and assert they
+   appear in neither stream, including when the command prints them in pieces (also under a
+   real PTY from `script(1)`), JSON-escaped in both styles, URL-encoded, base64-encoded,
+   inside a Basic auth header, by dumping the env file, with a duplicate key, and in `run`'s
+   own errors. Process-group tests through the built binary cover a grandchild left behind,
+   one that ignores `SIGTERM` and holds no pipe, `SIGTERM` to `stubs` with a command that
+   ignores it, a crash while supervising, a reader that goes away against a command that
+   ignores `EPIPE`, a descendant that left the session while holding the pipes, a hostile
+   `NODE_OPTIONS` in a `--from` file with the binary run as the executable it ships as, every
+   `--env-file` spelling with `--require` and inline `--import` hooks and a canary-named
+   missing file through the launcher (as the file and through a symlink like npm's bin), and
+   through real npx with the skill's early `--`, using a local tarball offline with a private
+   npm cache. The same npx probes without the early `--` confirm the leak. Tests also cover a
+   196 KB write with the reader stalled for three seconds (all bytes delivered, exit code
+   kept), a short command returning in under a second, a relay error against a command that
+   handles it and ignores `SIGTERM`, and a `GIT_CONFIG_*` stub against real `git`. Every spawned process is killed in teardown
+   (`cli/test/helpers/leftovers.ts`), so a failing test can't leave one behind.
+
+### R13 `stubs skill install --protect`
+
+The skill is an instruction; a host setting is a control over the host's own tools. Where the
+agent host has one, the installer can add it, opt-in only, and says exactly what it changed.
+
+- Claude Code: appends to `permissions.deny` in `~/.claude/settings.json` (or
+  `$CLAUDE_CONFIG_DIR/settings.json`, which also moves the skill; created if missing):
+  `Read(.env)`, `Read(.env.*)`, and `Read(<config dir>/**)` as `~/.config/stubs/**` or an
+  absolute `//path` when `XDG_CONFIG_HOME` moves it. Not `.env*`, which would also catch
+  `.envrc`. Claude Code applies Read deny rules to Read, Edit, and Write, to `cat`, `head`,
+  `tail`, `sed`, and `tee` in Bash, and to redirections, at any depth under the project; not
+  to a script that opens the file itself or a `grep -r`. No `Read(!.env.example)` exceptions:
+  per the Claude Code docs an exception carves paths out of every rule listed before it in the
+  same file, including the user's, so adding one could reopen a template file they had denied.
+  Rules are ordered, so a stubs rule counts as in place only if no `Read(!...)` exception
+  follows it; if one does (the user's `Read(.env.*)` then `Read(!.env.local)`), the installer
+  refuses (exit `5`, nothing written) and names the rule and the exception, rather than
+  appending a second copy that would quietly undo the user's choice or reporting protection
+  that isn't there. Only missing rules are appended, at the end. Everything else in the file
+  is kept as parsed. A file that isn't valid JSON (an empty file included), or whose
+  `permissions` or `permissions.deny` has the wrong shape (`null`, or a list with a non-string
+  entry), is refused the same way and the rules are printed to
+  add by hand. A symlinked `settings.json` is written through to its target, so a dotfiles
+  link survives; a link whose target is missing is refused (`lstat` after `realpath` fails),
+  since writing would replace the link with a plain file. The file keeps its mode (`0644`
+  when new).
+- Codex: no equivalent the installer can add safely (file-level denies are permission
+  profiles, beta, which replace the sandbox configuration). Reported as unsupported, nothing
+  written; the README points at the profile syntax.
+- Rejected: shipping a `PreToolUse` hook in the skill's frontmatter. Hooks register only once
+  the skill is invoked, run a shell command per tool call, and would need to parse Bash to
+  catch `cat`; the settings rule is always on and maintained by the host. Also rejected:
+  editing settings without a flag, and `Bash(cat .env*)` rules, which are prefix matches that
+  `head`, `./.env`, or `/bin/cat` walk around.
+
+### What this version claims, and what it doesn't
+
+Everything above keeps values out of logs and transcripts by accident. None of it stops an
+agent that sets out to read them: it runs arbitrary code as the user, so it can open the file
+from a script, print a value in an encoding the masker doesn't know (hex, UTF-16, split across
+stdout and stderr), or write to the terminal device by name. The docs say this plainly. A hard
+guarantee needs the values kept out of the agent's reach altogether, which is TAL-142.
 
 ## Agent docs (R7)
 
@@ -126,12 +282,12 @@ error object, never thrown.
 - The root `README.md` gets a short "For agents" section linking there, plus this `AGENTS.md`
   snippet:
 
-  > When given a link on stubs.talix.app, run `npx -y @talix/stubs@0.3.0 pull <link>` (or the
+  > When given a link on stubs.talix.app, run `npx -y -- @talix/stubs@0.3.0 pull <link>` (or the
   > `pull_stub` tool). It writes the values into `.env.local` and prints only the key names.
   > Never `cat`, read, or print `.env*` files.
 
 - The opened-ticket page in the web app (`src/client/reveal.ts`) and the sealed page get one
-  line of fine print: "Pulling this into a project? `npx -y @talix/stubs@0.3.0 pull <link>` writes it
+  line of fine print: "Pulling this into a project? `npx -y -- @talix/stubs@0.3.0 pull <link>` writes it
   straight to .env.local." On the sealed page the COPY button copies the command with the real link (it's the
   recipient's own), but on screen the link reads `<this link>`: the key must not sit on
   screen for screenshots and screen shares. The opened page shows the generic form.
@@ -176,7 +332,7 @@ recipient instead of bare.
   (`stubs1…`), validated on input. When set, the printed ticket says "LOCKED" and the fine print
   says the link only opens on that machine with `stubs pull`.
 - Web `/t` page on a v2 link: "LOCKED STUB" screen, not void, not consumed: it shows the
-  `npx -y @talix/stubs@0.3.0 pull <link>` command with a copy button and explains why the browser
+  `npx -y -- @talix/stubs@0.3.0 pull <link>` command with a copy button and explains why the browser
   can't open it. No status call is made (the browser can't prove possession).
 - `stubs pull` unwraps with the local identity before proceeding as R1. `stubs check` likewise.
 - `stubs push --to <public id>` locks from the CLI.
@@ -191,4 +347,8 @@ and the LOCKED screen.
 ## Out of scope
 
 Push over MCP, multiple identities per machine, passphrase-protected identities, OS keychains,
-Windows ACLs beyond what `fs.chmod` gives, self-hosting docs.
+Windows ACLs beyond what `fs.chmod` gives, self-hosting docs, a `run` tool over MCP (the agent
+has a shell), a pseudo-terminal for `run` (needs a native dependency), masking values in forms
+other than the ones listed in R12, process groups on Windows, and anything that stops the
+command itself from sending a value elsewhere: `run` is a filter on output, not a sandbox
+(TAL-142).
