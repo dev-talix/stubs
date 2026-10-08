@@ -84,6 +84,102 @@ Reads `file` (default `.env.local`, or stdin when `file` is `-`), creates a stub
 `issueTicket`, prints the link (human) or `{"ok":true,"link":"...","expiresAt":<ms>}`. Refuses
 an empty file (`3`). Default TTL `1h`.
 
+### TAL-140 hidden terminal entry
+
+Requirement source: user-approved scope for TAL-140, owned by the TAL-140 implementer and
+integration reviewer. Existing CLI creation already accepts a file or piped stdin. This
+addition is `stubs push --prompt` for a user entering multiline `.env` in their own terminal.
+Full TUI, MCP push, sensitive-secret form elicitation and host integration are out of scope.
+
+The user runs the command themselves and shares only its link with the agent, preferably
+locked to the recipient. Hidden entry keeps plaintext out of argv, files and terminal output.
+It does not defend against an input recorder or an agent observing that terminal.
+
+Intended and implemented path: `cli/src/cli.ts` parses the opt-in flag; `pushStub` in
+`cli/src/push.ts` rejects a file plus `--prompt` and validates TTL and the recipient's public
+id format before input. `readHiddenInput` in `cli/src/prompt.ts`, wired by `cli/src/main.ts`,
+requires TTY stdin and stderr without consuming a rejected pipe, disables echo through raw
+mode, enables bracketed paste and prints fixed instructions to stderr. Enter/CRLF normalize
+to LF. Outside a paste, Backspace deletes one UTF-8 character and Ctrl-U clears the current
+line. The reader tracks bracketed-paste wrappers across chunks, including after it discards
+input. Nested wrappers reject the input but remain counted until the outer wrapper closes.
+After a malformed escape prefix, a new ESC starts another marker candidate so a nested
+opening wrapper still counts, including with consecutive ESC bytes.
+Embedded Ctrl-C/D and editing controls reject the paste without restoring echo or
+issuing a partial stub. It drains through the closing wrapper, then requires an explicit
+Ctrl-D/C outside the paste. Ctrl-D completes; Ctrl-C cancels with exit `130`. Terminals
+without bracketed paste cannot distinguish pasted controls from command keys; paste plain
+text there. The input buffer is bounded by the core `MAX_PLAINTEXT_BYTES` limit of 32 KB.
+Oversize input and unsupported control keys discard the
+buffer and drain subsequent input with echo disabled until the paste ends and explicit
+Ctrl-D/C arrives. Empty or invalid input
+never reaches ticket issuance.
+
+Bracketed paste is disabled, terminal raw mode restored and stdin paused before the reader
+resolves, so `issueTicket` encrypts and sends only afterward. Stream error, stream close,
+interruption signals and process exit also restore terminal mode. Expected errors contain fixed messages without
+input. The existing ticket module still owns encryption, unusable-recipient rejection and
+network failure handling; the Worker and MCP tools are unchanged.
+
+Acceptance checks chosen before implementation:
+
+- `cli/test/commands.test.ts`: default file and piped stdin regressions, option wiring,
+  locking/TTL/JSON, invalid argument guards before prompting, no issuance on empty/oversize
+  input, and sanitized prompt exceptions.
+- `cli/test/prompt.test.ts`: UTF-8 across chunks, CRLF, editing, bracketed paste, exact limit,
+  split and nested wrappers, pasted control rejection, cancellation, stream and write errors, signals,
+  handler removal and raw-mode cleanup.
+- `cli/test/prompt-binary.test.ts` plus `cli/test/helpers/terminal.py`: built binary through
+  a real Python-standard-library PTY, multiline content round trip, no input echo, no
+  plaintext creation file, complete terminal-attribute restoration, Ctrl-C, empty Ctrl-D,
+  oversize paste with a trailing canary, embedded Ctrl-C/D followed by delayed trailing
+  canaries, nested-paste rejection through its outer close, SIGTERM and open non-TTY pipe rejection.
+
+Verification: base commit `51314c631d45378cad7c4405f1b31f789ffea46b`, uncommitted
+changes on `tal-140/hidden-terminal-entry`, macOS with Node 22.23.2, Python 3.14.7 and
+host pnpm 12.9.1. Synthetic canaries and a local fake HTTP server only. Independent
+real-PTY red evidence for premature completion and trailing input echo is in
+`/tmp/stubs-card-review-20261008/tal140-paste-red.log`.
+The malformed-prefix resynchronization finding is recorded in
+`/tmp/stubs-card-review-20261008/resync-observed-3.json`.
+
+On the repaired input, focused command, lifecycle and built-PTY checks PASS, 122 tests
+including thirteen real PTY cases and one open-pipe case, in
+`/tmp/stubs-tal140-20261008/entry-paste-resync-focused.log`. Root typecheck and CLI build
+PASS in `entry-paste-resync-typecheck.log` and `entry-paste-resync-build.log` in that same
+directory. `git diff --check` PASS. Dirty-diff artifact:
+`/tmp/stubs-tal140-20261008/entry-paste-resync.patch`.
+
+Integration verification by the parent: all 739 repository tests passed across 31 files,
+including the CLI, worker and client projects. Root typecheck, CLI build, site build and
+`git diff --check` passed. Logs are
+`/tmp/stubs-card-review-20261008/integration-verified-tests.log`,
+`integration-verified-typecheck.log`, `integration-verified-cli-build.log` and
+`integration-verified-site-build.log` in the same directory. The tested input is pinned by
+`integration-gate-manifest.json`; final changes to this record only reconcile gate metadata.
+Final source reviews reported no remaining findings in `tal143-final-review.json` and
+`tal140-resync-review.json`. The complete final dirty artifacts are `tal143-final.patch`,
+`tal140-final.patch` and `integration-final.patch`. Source and test bytes match the gate
+manifest; Windows console behavior, unsupported paste terminals and deployment were NOT RUN.
+No lint script is configured.
+
+Commands from the repository root, with package-manager auto-install disabled:
+
+```sh
+export npm_config_manage_package_manager_versions=false
+export npm_config_verify_deps_before_run=false
+export PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN=false
+export WRANGLER_SEND_METRICS=false
+node node_modules/vitest/vitest.mjs run
+pnpm --config.verifyDepsBeforeRun=false typecheck
+pnpm --config.verifyDepsBeforeRun=false --filter @talix/stubs build
+pnpm --config.verifyDepsBeforeRun=false build
+```
+
+PTY checks require POSIX and Python 3 and explicitly skip if unavailable. Deployment,
+Windows console behavior and input-recording software were not tested. No production
+credentials were used.
+
 ### R4 `stubs mcp`
 
 Starts an MCP server on stdio (`@modelcontextprotocol/sdk`, `StdioServerTransport`). Server

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- `stubs push --prompt` reads hidden multiline `.env` input from your terminal without a
+  plaintext file. Ctrl-D finishes; Ctrl-C cancels without creating a stub. It accepts up to
+  32 KB of UTF-8, restores the terminal before sending, and refuses redirected input or a
+  file argument. Existing file and piped stdin input are unchanged. Run it in your own
+  terminal and give the agent only the resulting link. Bracketed paste stays hidden through
+  its closing marker; embedded control keys discard the input and require a separate
+  Ctrl-D or Ctrl-C after the paste ends.
+
 - MCP `pull_stub` checks its resolved env target against the real project directory before
   opening a stub. File symlinks and parent symlinks that point outside are refused, including
   the default `.env.local`. Dangling file symlinks are refused without replacing them.

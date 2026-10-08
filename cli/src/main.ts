@@ -2,6 +2,7 @@
 
 import { homedir } from "node:os";
 import { run } from "./cli";
+import { readHiddenInput } from "./prompt";
 
 async function readStdin(): Promise<string> {
   const chunks: Buffer[] = [];
@@ -34,6 +35,7 @@ run(process.argv.slice(2), {
   home: homedir(),
   makeTransport: (origin) => (path, init) => fetch(origin + path, init),
   readStdin,
+  readPrompt: readHiddenInput,
   run: { stdout: process.stdout, stderr: process.stderr, stdin: "inherit" },
 }).then(
   (code) => {

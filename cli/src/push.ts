@@ -22,6 +22,8 @@ export interface PushOptions {
   origin: string;
   /** A path, "-" for stdin, or undefined for .env.local. */
   file?: string;
+  /** Hidden multiline input from the user's terminal, instead of a file. */
+  prompt?: boolean;
   ttl?: string;
   /** A recipient's public id; the link then only opens with their identity. */
   lockTo?: string;
@@ -31,11 +33,15 @@ export interface PushDeps {
   transport: Transport;
   cwd: string;
   readStdin: () => Promise<string>;
+  readPrompt: () => Promise<string | Failure>;
 }
 
 export type PushSuccess = { ok: true; link: string; expiresAt: number; locked?: true };
 
 export async function pushStub(options: PushOptions, deps: PushDeps): Promise<PushSuccess | Failure> {
+  if (options.prompt && options.file !== undefined) {
+    return fail("invalid", "--prompt can't be combined with a file or stdin argument.");
+  }
   const ttl = options.ttl === undefined ? DEFAULT_TTL_SECONDS : parseTtl(options.ttl);
   if (ttl === null) return fail("invalid", "--ttl must be one of 5m, 1h, 1d, 7d.");
   const lockTo = options.lockTo?.trim();
@@ -44,11 +50,18 @@ export async function pushStub(options: PushOptions, deps: PushDeps): Promise<Pu
   }
 
   const file = options.file ?? DEFAULT_ENV_FILE;
-  const source = file === "-" ? "stdin" : file;
+  const source = options.prompt ? "Hidden input" : file === "-" ? "stdin" : file;
   let text: string;
   try {
-    text = file === "-" ? await deps.readStdin() : await readFile(resolve(deps.cwd, file), "utf8");
+    if (options.prompt) {
+      const input = await deps.readPrompt();
+      if (typeof input !== "string") return input;
+      text = input;
+    } else {
+      text = file === "-" ? await deps.readStdin() : await readFile(resolve(deps.cwd, file), "utf8");
+    }
   } catch (error) {
+    if (options.prompt) return fail("error", "Couldn't read hidden input. No stub was created.");
     const code = errorCode(error);
     if (code === "ENOENT") return fail("invalid", `${source} doesn't exist.`);
     if (code === "EISDIR") return fail("invalid", `${source} is a folder, not a file.`);
@@ -83,4 +96,3 @@ export async function pushStub(options: PushOptions, deps: PushDeps): Promise<Pu
       return fail("error", "The server couldn't create the stub.");
   }
 }
-

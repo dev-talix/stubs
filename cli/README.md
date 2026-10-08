@@ -225,13 +225,14 @@ Void (opened or expired).
 {"ok":true,"status":"void"}
 ```
 
-### `stubs push [file]`
+### `stubs push [file|--prompt]`
 
 Encrypts a file on your machine and prints a new link. `file` defaults to `.env.local`. Pass
 `-` to read stdin. An empty file is refused.
 
 | Flag | What it does |
 |---|---|
+| `--prompt` | Enter or paste multiline `.env` text with terminal echo disabled. Ctrl-D finishes; Ctrl-C cancels. |
 | `--ttl 5m\|1h\|1d\|7d` | How long the link stays valid. Default `1h`. |
 | `--to <stubs id>` | Lock the stub to one machine: only the holder of that identity can open it. |
 | `--origin <url>` | As for `pull`. |
@@ -239,6 +240,29 @@ Encrypts a file on your machine and prints a new link. `file` defaults to `.env.
 
 An unlocked link is the only way to open the stub, so treat it like the values themselves. A
 locked link is safe to leave in a chat: without the recipient's identity it opens nothing.
+
+To create a stub without a plaintext file, run `stubs push --prompt` in your own terminal.
+Paste the `.env` text when the hidden-input message appears, then press Ctrl-D. Enter starts
+a new line; outside a paste, Backspace removes the last character and Ctrl-U clears the
+current line. Input is held in memory and capped at 32 KB of UTF-8. CRLF and Enter become LF.
+An empty input is refused. If input exceeds the limit or includes an unsupported control key, the CLI discards
+it and keeps echo disabled until the paste ends and you press Ctrl-D or Ctrl-C, so the rest
+of a paste stays hidden. The prompt enables bracketed paste in terminals that support it.
+Ctrl-C/D inside a bracketed paste reject the input; they do not finish or cancel the prompt.
+Press Ctrl-D or Ctrl-C yourself after the paste ends. Pasted editing controls are also refused.
+In terminals without bracketed paste, paste plain text without control characters.
+Cancellation exits `130` and creates no stub.
+
+`--prompt` requires stdin and stderr to be terminals. It cannot be combined with a file or
+`-`. File input and piped stdin keep their existing behavior. The terminal is restored before
+encryption and the network request, and bracketed paste is disabled when the prompt ends.
+`--json` still prints one result object on stdout; the input instructions go to stderr.
+
+Run this command yourself, then give the agent only the resulting link, preferably locked
+with `--to <recipient id>`. Do not paste secrets into an agent chat or ask an agent to launch
+the prompt in a terminal it observes. Disabling echo keeps input off ordinary terminal output;
+it does not protect against a session recorder that captures input or an agent that observes
+the terminal. MCP push and secret elicitation are outside this command's scope.
 
 ### `stubs init`
 

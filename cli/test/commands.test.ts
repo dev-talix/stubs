@@ -525,6 +525,47 @@ describe("push", () => {
   it("refuses a missing file with exit 3", async () => {
     expect((await push(["missing.env"])).code).toBe(3);
   });
+
+  it("wires --prompt to hidden input, preserving TTL, locking and JSON output", async () => {
+    const recipient = await generateIdentity();
+    let reads = 0;
+    const result = await runCli(["push", "--prompt", "--ttl", "5m", "--to", recipient.publicId, "--json"], {
+      server, cwd,
+      readPrompt: async () => { reads++; return STUB; },
+    });
+    expect(reads).toBe(1);
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({ ok: true, locked: true });
+    expect(JSON.parse(server.sent[1]!).ttlSeconds).toBe(300);
+    expect(await readdir(cwd)).toEqual([]);
+    expect(result.stdout + result.stderr).not.toContain("sk-123");
+  });
+
+  it.each([[["x.env"]], [["-"]], [["--ttl", "2h"]], [["--to", "bad-id"]]])(
+    "rejects invalid --prompt arguments %j before asking or issuing", async (args) => {
+      const result = await runCli(["push", "--prompt", ...args], {
+        server, cwd,
+        readPrompt: async () => { throw new Error("prompt must not run"); },
+      });
+      expect(result.code).toBe(3);
+      expect(server.sent).toEqual([]);
+    },
+  );
+
+  it.each(["", "  \n", "x".repeat(32 * 1024 + 1)])("refuses empty or oversized hidden input", async (input) => {
+    const result = await runCli(["push", "--prompt"], { server, cwd, readPrompt: async () => input });
+    expect(result.code).toBe(3);
+    expect(server.sent).toEqual([]);
+  });
+
+  it("never issues or repeats an exception from hidden input", async () => {
+    const result = await runCli(["push", "--prompt"], {
+      server, cwd, readPrompt: async () => { throw new Error(STUB); },
+    });
+    expect(result.code).toBe(1);
+    expect(result.stdout + result.stderr).not.toContain("sk-123");
+    expect(server.sent).toEqual([]);
+  });
 });
 
 describe("locked stubs", () => {

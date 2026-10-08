@@ -84,6 +84,11 @@ it. It runs as a CLI or as an MCP server for Claude Code, Cursor, and Codex.
 A stub can also be locked to one machine: the recipient runs `npx -y --loglevel=warn -- @talix/stubs@0.4.0 init` once
 and shares the id it prints; the sender pastes it into "Lock to a recipient". A locked link is
 useless without that machine's identity, so it's safe to leave in a chat with an agent.
+For direct entry without a plaintext file, run `stubs push --prompt` in your own terminal,
+paste your multiline `.env` when prompted, and press Ctrl-D. Input is hidden; Ctrl-C cancels.
+Give the agent only the resulting link, preferably locked to its recipient. Hidden input
+does not protect against input-recording software or an agent that observes that terminal.
+The flag is an unreleased CLI addition; see [the CLI docs](cli/README.md#stubs-push-file--prompt).
 The simplest setup is the agent skill, which works across every project:
 
 ```bash

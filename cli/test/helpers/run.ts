@@ -1,6 +1,7 @@
 import { Writable } from "node:stream";
 import { run } from "../../src/cli";
 import type { FakeServer } from "./fake-server";
+import { fail, type Failure } from "../../src/result";
 
 export const ORIGIN = "https://stubs.talix.app";
 
@@ -27,6 +28,7 @@ export async function runCli(
     server: FakeServer;
     cwd: string;
     stdin?: string;
+    readPrompt?: () => Promise<string | Failure>;
     env?: Record<string, string>;
     home?: string;
     version?: string | null;
@@ -43,6 +45,7 @@ export async function runCli(
     home: options.home ?? "/nonexistent/stubs-test-home",
     makeTransport: () => options.server.transport,
     readStdin: async () => options.stdin ?? "",
+    readPrompt: options.readPrompt ?? (async () => fail("invalid", "No test terminal.")),
     run: { stdout: collector(stdout), stderr: collector(stderr), stdin: "ignore" },
     version: options.version,
   });

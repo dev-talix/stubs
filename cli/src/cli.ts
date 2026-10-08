@@ -27,6 +27,7 @@ export interface Io {
   home: string;
   makeTransport: (origin: string) => Transport;
   readStdin: () => Promise<string>;
+  readPrompt: () => Promise<string | Failure>;
   /**
    * For `stubs run`: where the command's output goes (through the masker, not the redactor,
    * which would blank every URL in a test run) and what it gets as stdin.
@@ -57,8 +58,10 @@ Usage:
   stubs check <link>|- [--origin <url>] [--json]
       Say whether the stub is still sealed, without opening it.
 
-  stubs push [file] [--ttl 5m|1h|1d|7d] [--to <id>] [--origin <url>] [--json]
+  stubs push [file|--prompt] [--ttl 5m|1h|1d|7d] [--to <id>] [--origin <url>] [--json]
       Seal <file> (default .env.local, "-" for stdin) into a new stub and print its link.
+      --prompt reads hidden multiline .env input in your terminal. Ctrl-D finishes;
+      Ctrl-C cancels. Cannot be combined with a file or "-".
       With --to, the stub is locked: only the machine holding that stubs id can open it.
 
   stubs init [--force] [--json]
@@ -121,7 +124,7 @@ const COMMON: Options = {
 const COMMANDS: Record<string, Options> = {
   pull: { ...COMMON, to: { type: "string" }, overwrite: { type: "boolean" }, "allow-tracked": { type: "boolean" } },
   check: COMMON,
-  push: { ...COMMON, ttl: { type: "string" }, to: { type: "string" } },
+  push: { ...COMMON, ttl: { type: "string" }, to: { type: "string" }, prompt: { type: "boolean" } },
   init: { json: COMMON.json!, help: COMMON.help!, force: { type: "boolean" } },
   id: { json: COMMON.json!, help: COMMON.help! },
   mcp: { help: COMMON.help! },
@@ -241,8 +244,8 @@ export async function run(argv: string[], io: Io): Promise<number> {
     if (positionals.length > 1) return report(fail("invalid", "push takes at most one file."), json, out);
     const lockTo = stringValue(values.to);
     const result = await pushStub(
-      { origin, file: positionals[0], ttl: stringValue(values.ttl), lockTo },
-      { transport, cwd: io.cwd, readStdin: io.readStdin },
+      { origin, file: positionals[0], prompt: values.prompt === true, ttl: stringValue(values.ttl), lockTo },
+      { transport, cwd: io.cwd, readStdin: io.readStdin, readPrompt: io.readPrompt },
     );
     const code = report(result, json, out);
     if (!json && result.ok && result.locked) out.deliberate.stderr(`Locked to ${lockTo?.trim()}.\n`);
@@ -327,6 +330,7 @@ function report(result: CommandResult, json: boolean, out: Output): number {
 
 /** Like exitCodeFor, but a void `check` exits 2 so scripts can branch on it. */
 export function exitCodeForResult(result: CommandResult): number {
+  if (!result.ok && result.exitCode !== undefined) return result.exitCode;
   if (result.ok && "status" in result && result.status === "void") return 2;
   return exitCodeFor(result);
 }
