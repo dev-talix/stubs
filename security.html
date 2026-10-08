@@ -136,7 +136,7 @@
               <p>An ordinary link works for anyone who has it. A locked link opens on one machine only.</p>
               <ul>
                 <li>
-                  The recipient runs <code>npx -y -- @talix/stubs@{{STUBS_CLI_VERSION}} init</code>
+                  The recipient runs <code>npx -y --loglevel=warn -- @talix/stubs@{{STUBS_CLI_VERSION}} init</code>
                   once. It creates an X25519 key pair in <code>~/.config/stubs/identity</code>, or
                   under <code>$XDG_CONFIG_HOME/stubs/</code> if that's set (file mode 0600, folder
                   0700), and prints a public id that starts with
@@ -261,7 +261,7 @@
                 <li>
                   Tools that print their environment. A tool that prints its environment on error
                   can leak a value into an agent's transcript. Run it as
-                  <code>npx -y -- @talix/stubs@{{STUBS_CLI_VERSION}} run -- &lt;command&gt;</code>
+                  <code>npx -y --loglevel=warn -- @talix/stubs@{{STUBS_CLI_VERSION}} run -- &lt;command&gt;</code>
                   and stubs swaps each value for <code>[stubs:KEY]</code> in its output, including
                   common base64, URL and JSON forms. That stops accidents, not an agent that's
                   trying: a script can still open the file, write to the terminal device directly,

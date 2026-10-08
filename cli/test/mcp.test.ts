@@ -41,7 +41,7 @@ describe("mcp server", () => {
     expect(tools.map((tool) => tool.name).sort()).toEqual(["check_stub", "pull_stub"]);
     const pull = tools.find((tool) => tool.name === "pull_stub")!;
     expect(pull.description).toBe(
-      `Open a one-time Stubs link and write its values into the project's env file. Returns key names only. Never read or print the env file afterwards; run commands that need the values with \`npx -y -- @talix/stubs@${readPackageVersion()} run -- <cmd>\`, which masks them in the output.`,
+      `Open a one-time Stubs link and write its values into the project's env file. Returns key names only. Never read or print the env file afterwards; run commands that need the values with \`npx -y --loglevel=warn -- @talix/stubs@${readPackageVersion()} run -- <cmd>\`, which masks them in the output.`,
     );
     expect(Object.keys(pull.inputSchema.properties ?? {}).sort()).toEqual(["file", "link", "overwrite"]);
   });

@@ -15,9 +15,9 @@ Three commands cover everything:
 
 | Need | Run |
 |---|---|
-| Put a link's values into the project | `npx -y -- @talix/stubs@{{VERSION}} pull '<link>' --json` |
-| Run anything that needs those values | `npx -y -- @talix/stubs@{{VERSION}} run -- <command>` |
-| Hand the values to another agent or person | `npx -y -- @talix/stubs@{{VERSION}} push --to <stubs id> --json` |
+| Put a link's values into the project | `npx -y --loglevel=warn -- @talix/stubs@{{VERSION}} pull '<link>' --json` |
+| Run anything that needs those values | `npx -y --loglevel=warn -- @talix/stubs@{{VERSION}} run -- <command>` |
+| Hand the values to another agent or person | `npx -y --loglevel=warn -- @talix/stubs@{{VERSION}} push --to <stubs id> --json` |
 
 ## Pull a stub
 
@@ -34,7 +34,7 @@ again from where it was sent. Never edit a link to make it fit.
 Then run this from the project root, with the link in single quotes:
 
 ```bash
-npx -y -- @talix/stubs@{{VERSION}} pull '<link>' --json
+npx -y --loglevel=warn -- @talix/stubs@{{VERSION}} pull '<link>' --json
 ```
 
 - Add `--to <file>` only if the user names a different env file (the default is `.env.local`).
@@ -54,7 +54,7 @@ on any `warnings`.
 | 0 | Done | Report the key names. |
 | 1 | Something else went wrong | If the output has `recoveredFile`, the stub was used and its values were saved there: give the user that path and tell them to move the values themselves; don't open it. Otherwise pass on the message, which says whether the stub was used. Don't retry without asking. |
 | 2 | Void: already opened or expired | Ask the user for a new link. Don't retry. |
-| 3 | Bad link, wrong site, or a locked stub this machine can't open | Report the message. For a locked stub, the user needs the stubs id of the machine the sender locked it to: `npx -y -- @talix/stubs@{{VERSION}} id` prints it, or `init` creates one the first time. Don't run either yourself. |
+| 3 | Bad link, wrong site, or a locked stub this machine can't open | Report the message. For a locked stub, the user needs the stubs id of the machine the sender locked it to: `npx -y --loglevel=warn -- @talix/stubs@{{VERSION}} id` prints it, or `init` creates one the first time. Don't run either yourself. |
 | 4 | Network problem; nothing was used | Retry once. |
 | 5 | Refused: git would track the env file (or the file it links to), or git couldn't be asked | Pass on the message: it names the path to add to `.gitignore`, or says git couldn't run. Don't pass `--allow-tracked` unless the user asks. |
 | 6 | Opened but wouldn't decrypt; now void | Ask for a new link. |
@@ -67,8 +67,8 @@ variables goes through `run`, which puts the values in the command's environment
 every one of them in the command's output with `[stubs:KEY]`:
 
 ```bash
-npx -y -- @talix/stubs@{{VERSION}} run -- pnpm test
-npx -y -- @talix/stubs@{{VERSION}} run -- pnpm dev
+npx -y --loglevel=warn -- @talix/stubs@{{VERSION}} run -- pnpm test
+npx -y --loglevel=warn -- @talix/stubs@{{VERSION}} run -- pnpm dev
 ```
 
 - Keep the first `--` after `npx -y`: it stops Node from loading an `--env-file` argument
@@ -112,11 +112,11 @@ Don't load the file some other way (`source .env.local`, `export $(cat .env.loca
 values, so you can share them without seeing them.
 
 Ask for the recipient's stubs id first. They get it by running
-`npx -y -- @talix/stubs@{{VERSION}} id` on the machine that will pull (or `init` the first time).
+`npx -y --loglevel=warn -- @talix/stubs@{{VERSION}} id` on the machine that will pull (or `init` the first time).
 With it, the link is locked to that machine and is safe to paste anywhere:
 
 ```bash
-npx -y -- @talix/stubs@{{VERSION}} push <file> --ttl 1h --to <stubs id> --json
+npx -y --loglevel=warn -- @talix/stubs@{{VERSION}} push <file> --ttl 1h --to <stubs id> --json
 ```
 
 Only drop `--to` if the user says the stub shouldn't be locked. An unlocked link is the secret

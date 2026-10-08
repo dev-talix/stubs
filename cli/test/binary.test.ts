@@ -437,7 +437,7 @@ describe("stubs run through the binary", () => {
     const pack = JSON.parse(packed.stdout);
     const tarball = join(cwd, (Array.isArray(pack) ? pack[0] : Object.values(pack)[0]).filename);
     const skill = await readFile(join(ROOT, "cli/skill/SKILL.md"), "utf8");
-    const prefix = /npx (-y (?:-- )?)@talix\/stubs@\{\{VERSION\}\} run -- pnpm test/.exec(skill);
+    const prefix = /npx (-y (?:--loglevel=warn )?(?:-- )?)@talix\/stubs@\{\{VERSION\}\} run -- pnpm test/.exec(skill);
     expect(prefix).not.toBeNull();
     const recommended = prefix![1]!.trim().split(" ");
     const marker = join(cwd, "executed");
@@ -649,7 +649,7 @@ describe("stubs binary", () => {
     const { stdout: shown } = await exec(process.execPath, [BIN, "skill", "show"], { cwd, env });
     expect(installed).toBe(shown);
     const { version } = JSON.parse(await readFile(join(ROOT, "cli/package.json"), "utf8"));
-    expect(installed).toContain(`npx -y -- @talix/stubs@${version} pull`);
+    expect(installed).toContain(`npx -y --loglevel=warn -- @talix/stubs@${version} pull`);
     expect(await stat(realSkill).then((entry) => entry.mtimeMs, () => null)).toBe(before);
   });
 

@@ -14,7 +14,8 @@
   `--from`, not `--env-file`, which Node would read itself before `stubs` starts; the `stubs`
   executable is now a one-line sh launcher that execs `node -- stubs.js`, so an `--env-file`
   typo is refused before Node can read the file on direct, npm bin, global npm, and `pnpm dlx`
-  launches. Npx needs an early separator: use `npx -y --` before the pinned package name.
+  launches. Npx needs an early separator: use `npx -y --loglevel=warn --` before the pinned
+  package name. The `--loglevel=warn` keeps npm 12 from echoing your command line.
   Plain npx without that `--`, and raw `node dist/stubs.js`, are unprotected. On Windows
   without `sh`, use `node -- dist/stubs.js` with the installed path. The command
   runs in its own process group, which `run` manages: forwarded signals, leftovers when the

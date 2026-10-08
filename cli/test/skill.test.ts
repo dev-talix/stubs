@@ -29,8 +29,8 @@ describe("renderSkill", () => {
   it("pins every placeholder to the package version", () => {
     expect(SKILL).not.toContain("{{");
     expect(SKILL.split(VERSION)).toHaveLength(11);
-    expect(SKILL).toContain(`npx -y -- @talix/stubs@${VERSION} run -- pnpm test`);
-    expect(SKILL).toContain(`npx -y -- @talix/stubs@${VERSION} pull '<link>' --json`);
+    expect(SKILL).toContain(`npx -y --loglevel=warn -- @talix/stubs@${VERSION} run -- pnpm test`);
+    expect(SKILL).toContain(`npx -y --loglevel=warn -- @talix/stubs@${VERSION} pull '<link>' --json`);
     expect(isStubsSkill(SKILL)).toBe(true);
   });
 

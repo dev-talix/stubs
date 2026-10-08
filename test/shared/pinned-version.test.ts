@@ -14,7 +14,7 @@ const MARKDOWN = ["README.md", "cli/README.md", "cli/CHANGELOG.md", "docs/agent-
 
 // Site files that vite.config.ts stamps at build time from the same package.json.
 const TEMPLATES = ["index.html", "security.html", "src/llms.txt"];
-const COMMAND_PREFIX = /(npx -y (?:-- )?|npm i -g |"-y", ")$/;
+const COMMAND_PREFIX = /(npx -y (?:--loglevel=warn -- )?|npm i -g |"-y", ")$/;
 
 describe("pinned CLI version", () => {
   it("comes from cli/package.json", () => {
@@ -35,7 +35,7 @@ describe("pinned CLI version", () => {
     expect(unpinned.map((m) => m[0] + text.slice(m.index! + m[0].length, m.index! + m[0].length + 12))).toEqual([]);
   });
 
-  it.each(["npx -y ", "npx -y -- ", "npm i -g ", '"-y", "'])("checks the version after %s", (prefix) => {
+  it.each(["npx -y ", "npx -y --loglevel=warn -- ", "npm i -g ", '"-y", "'])("checks the version after %s", (prefix) => {
     expect(COMMAND_PREFIX.test(prefix)).toBe(true);
   });
 
@@ -49,8 +49,8 @@ describe("pinned CLI version", () => {
         join(root, "cli/server.json"),
         JSON.stringify({ version: "0.1.0", packages: [{ registryType: "npm", version: "0.1.0" }] }),
       );
-      const before = 'npx -y -- @talix/stubs@0.1.0 run -- pnpm test\n["-y", "@talix/stubs@0.2.0", "mcp"]\n';
-      const after = 'npx -y -- @talix/stubs@9.8.7-beta.1 run -- pnpm test\n["-y", "@talix/stubs@9.8.7-beta.1", "mcp"]\n';
+      const before = 'npx -y --loglevel=warn -- @talix/stubs@0.1.0 run -- pnpm test\n["-y", "@talix/stubs@0.2.0", "mcp"]\n';
+      const after = 'npx -y --loglevel=warn -- @talix/stubs@9.8.7-beta.1 run -- pnpm test\n["-y", "@talix/stubs@9.8.7-beta.1", "mcp"]\n';
       for (const path of ["README.md", "cli/README.md", "docs/agent-tooling.md", "cli/CHANGELOG.md"]) {
         writeFileSync(join(root, path), before);
       }
