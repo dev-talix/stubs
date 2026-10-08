@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { cloudflare } from "@cloudflare/vite-plugin";
 import { defineConfig, type Plugin } from "vite";
 
@@ -59,8 +60,13 @@ function ticketPage(): Plugin {
   };
 }
 
+// Pages built from their own HTML. security.html is static (styles only, no script), so Workers
+// Assets serves it at /security before the SPA fallback is reached.
+const PAGES = ["index.html", "security.html"].map((page) => fileURLToPath(new URL(`./${page}`, import.meta.url)));
+
 export default defineConfig({
   plugins: [cloudflare(), cliVersion(), ticketPage()],
   // The CSP only allows same-origin fonts and scripts, so never inline assets as data: URIs.
   build: { assetsInlineLimit: 0 },
+  environments: { client: { build: { rollupOptions: { input: PAGES } } } },
 });

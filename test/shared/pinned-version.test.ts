@@ -10,7 +10,7 @@ const read = (path: string) => readFileSync(new URL(`../../${path}`, import.meta
 const MARKDOWN = ["README.md", "cli/README.md", "cli/CHANGELOG.md", "docs/agent-tooling.md", "cli/skill/SKILL.md"];
 
 // Site files that vite.config.ts stamps at build time from the same package.json.
-const TEMPLATES = ["index.html", "src/llms.txt"];
+const TEMPLATES = ["index.html", "security.html", "src/llms.txt"];
 
 describe("pinned CLI version", () => {
   it("comes from cli/package.json", () => {
@@ -35,5 +35,17 @@ describe("pinned CLI version", () => {
     const text = read(path);
     expect(text).toContain("@talix/stubs@{{STUBS_CLI_VERSION}}");
     expect(text.match(/@talix\/stubs@(?!\{\{STUBS_CLI_VERSION\}\})\S+/g)).toBeNull();
+  });
+
+  // The MCP Registry entry. `pnpm sync-version` rewrites both versions; the registry checks
+  // that the npm package's mcpName matches the server name.
+  it("is what cli/server.json publishes to the MCP Registry", () => {
+    const server = JSON.parse(read("cli/server.json"));
+    const pkg = JSON.parse(read("cli/package.json"));
+    expect(server.name).toBe(pkg.mcpName);
+    expect(server.version).toBe(STUBS_CLI_VERSION);
+    expect(server.packages).toEqual([
+      expect.objectContaining({ registryType: "npm", identifier: pkg.name, version: STUBS_CLI_VERSION }),
+    ]);
   });
 });

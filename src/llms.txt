@@ -30,3 +30,4 @@ MCP: `npx -y @talix/stubs@{{STUBS_CLI_VERSION}} mcp` exposes `pull_stub(link, fi
 `check_stub(link)`. Claude Code: `claude mcp add stubs -- npx -y @talix/stubs@{{STUBS_CLI_VERSION}} mcp`.
 
 Full docs: https://www.npmjs.com/package/@talix/stubs
+Security model, threat model, and how to report a vulnerability: https://stubs.talix.app/security

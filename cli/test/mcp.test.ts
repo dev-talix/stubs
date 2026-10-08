@@ -152,4 +152,12 @@ describe("mcp server", () => {
     expect((await call("check_stub", { link })).body).toMatchObject({ ok: true, status: "sealed" });
     expect(server.store.size).toBe(1);
   });
+
+  it("names the MCP server on every request", async () => {
+    const link = await server.seed("A=1", ORIGIN);
+    expect((await call("check_stub", { link })).isError).toBe(false);
+    expect((await call("pull_stub", { link })).isError).toBe(false);
+    expect(server.clients.length).toBeGreaterThanOrEqual(2);
+    expect(server.clients.every((client) => client === "mcp")).toBe(true);
+  });
 });

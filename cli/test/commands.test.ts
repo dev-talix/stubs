@@ -219,6 +219,18 @@ describe("pull", () => {
   });
 });
 
+describe("client header", () => {
+  it("names the CLI on every request", async () => {
+    const link = await server.seed(STUB, ORIGIN);
+    expect((await runCli(["check", link], { server, cwd })).code).toBe(0);
+    expect((await pull(link)).code).toBe(0);
+    await writeFile(join(cwd, ".env.push"), "A=1\n");
+    expect((await runCli(["push", ".env.push"], { server, cwd })).code).toBe(0);
+    expect(server.clients.length).toBeGreaterThanOrEqual(3);
+    expect(server.clients.every((client) => client === "cli")).toBe(true);
+  });
+});
+
 describe("review probes", () => {
   const fragmentOf = (link: string) => link.slice(link.indexOf("#") + 1);
   const expectClean = (result: { stdout: string; stderr: string }, link: string) => {
