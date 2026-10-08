@@ -204,10 +204,15 @@
                 </li>
                 <li>
                   The MCP server has <code>pull_stub</code> and <code>check_stub</code> and no push
-                  tool. <code>pull_stub</code> refuses absolute paths and <code>..</code>, so the
-                  path it's given has to stay inside the project. That's a check on the path as
-                  written. A symlink you put in the project is followed, even if it points
-                  outside, and the git guard then checks the file it points to.
+                  tool. <code>pull_stub</code> confines the selected env file to the project's
+                  real directory before opening the stub. It refuses absolute paths, paths
+                  that climb outside with <code>..</code>, and file or parent symlinks that
+                  resolve outside, including the default <code>.env.local</code>. Symlinks
+                  within the project work; dangling file symlinks are refused. The git guard,
+                  read, and write use the same resolved target. This doesn't isolate the
+                  process from concurrent filesystem changes. If a write fails after opening
+                  the stub, recovery still saves its values in the stubs config folder.
+                  The CLI's <code>--to</code> accepts user-chosen outside targets.
                 </li>
                 <li>
                   Every command the site and docs show pins an exact CLI version, so

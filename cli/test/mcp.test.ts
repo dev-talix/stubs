@@ -1,4 +1,4 @@
-import { mkdir, readFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, readFile, readdir, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -22,11 +22,15 @@ beforeEach(async () => {
   server = fakeServer();
   cwd = await tempDir();
   home = await tempDir();
-  const mcp = createMcpServer({ cwd, env: {}, home, makeTransport: () => server.transport });
+  await connect(cwd);
+});
+
+async function connect(directory: string) {
+  const mcp = createMcpServer({ cwd: directory, env: {}, home, makeTransport: () => server.transport });
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
   client = new Client({ name: "test", version: "0" });
   await Promise.all([mcp.connect(serverSide), client.connect(clientSide)]);
-});
+}
 
 async function call(name: string, args: Record<string, unknown>) {
   const result = await client.callTool({ name, arguments: args });
@@ -128,6 +132,162 @@ describe("mcp server", () => {
     await mkdir(join(cwd, "apps", "web"), { recursive: true });
     expect((await call("pull_stub", { link, file: "apps/web/.env.local" })).body).toMatchObject({ ok: true });
     expect(await readFile(join(cwd, "apps", "web", ".env.local"), "utf8")).toBe("A=1\n");
+  });
+
+  it.each([undefined, "custom.env"])("rejects an outside file symlink for file=%s before consuming", async (file) => {
+    const outside = await tempDir();
+    const target = join(outside, "private.env");
+    await writeFile(target, "PRIVATE=unchanged\n");
+    await symlink(target, join(cwd, file ?? ".env.local"));
+    const link = await server.seed("A=1", ORIGIN);
+    expect(await call("pull_stub", { link, file })).toMatchObject({ isError: true, body: { code: "invalid" } });
+    expect(server.sent).toEqual([]);
+    expect(server.store.size).toBe(1);
+    expect(await readFile(target, "utf8")).toBe("PRIVATE=unchanged\n");
+    expect(await readdir(outside)).toEqual(["private.env"]);
+    expect((await lstat(join(cwd, file ?? ".env.local"))).isSymbolicLink()).toBe(true);
+  });
+
+  it("rejects a symlinked outside parent for a new file before consuming", async () => {
+    const outside = await tempDir();
+    await symlink(outside, join(cwd, "config"));
+    const link = await server.seed("A=1", ORIGIN);
+    expect(await call("pull_stub", { link, file: "config/new.env" })).toMatchObject({
+      isError: true, body: { code: "invalid" },
+    });
+    expect(server.sent).toEqual([]);
+    expect(server.store.size).toBe(1);
+    expect(await readdir(outside)).toEqual([]);
+  });
+
+  it.skipIf(process.getuid?.() === 0)("rejects an unreadable outside file as invalid before consuming", async () => {
+    const target = join(await tempDir(), "private.env");
+    await writeFile(target, "PRIVATE=unchanged\n");
+    await symlink(target, join(cwd, ".env.local"));
+    await chmod(target, 0o000);
+    try {
+      const link = await server.seed("A=1", ORIGIN);
+      expect(await call("pull_stub", { link })).toMatchObject({ isError: true, body: { code: "invalid" } });
+      expect(server.sent).toEqual([]);
+      expect(server.store.size).toBe(1);
+    } finally {
+      await chmod(target, 0o600);
+    }
+    expect(await readFile(target, "utf8")).toBe("PRIVATE=unchanged\n");
+  });
+
+  it.skipIf(process.getuid?.() === 0)("rejects an unwritable outside parent as invalid before consuming", async () => {
+    const outside = await tempDir();
+    await symlink(outside, join(cwd, "config"));
+    await chmod(outside, 0o500);
+    try {
+      const link = await server.seed("A=1", ORIGIN);
+      expect(await call("pull_stub", { link, file: "config/new.env" })).toMatchObject({
+        isError: true, body: { code: "invalid" },
+      });
+      expect(server.sent).toEqual([]);
+      expect(server.store.size).toBe(1);
+    } finally {
+      await chmod(outside, 0o700);
+    }
+    expect(await readdir(outside)).toEqual([]);
+  });
+
+  it.skipIf(process.getuid?.() === 0).each([false, true])(
+    "rejects a non-searchable outside parent as invalid, new file=%s",
+    async (newFile) => {
+      const outside = await tempDir();
+      const target = join(outside, "private.env");
+      await writeFile(target, "PRIVATE=unchanged\n");
+      await symlink(outside, join(cwd, "config"));
+      await chmod(outside, 0o000);
+      try {
+        const link = await server.seed("A=1", ORIGIN);
+        expect(await call("pull_stub", { link, file: `config/${newFile ? "new.env" : "private.env"}` })).toMatchObject({
+          isError: true,
+          body: { code: "invalid", message: "The env file or its folder can't be accessed. Nothing was consumed." },
+        });
+        expect(server.sent).toEqual([]);
+        expect(server.store.size).toBe(1);
+      } finally {
+        await chmod(outside, 0o700);
+      }
+      expect(await readFile(target, "utf8")).toBe("PRIVATE=unchanged\n");
+      expect(await readdir(outside)).toEqual(["private.env"]);
+    },
+  );
+
+  it("rejects a sibling directory sharing the project's path prefix", async () => {
+    const parent = await tempDir();
+    const project = join(parent, "project");
+    const sibling = join(parent, "project-other");
+    await mkdir(project);
+    await mkdir(sibling);
+    await symlink(sibling, join(project, "config"));
+    await client.close();
+    await connect(project);
+    const link = await server.seed("A=1", ORIGIN);
+    expect(await call("pull_stub", { link, file: "config/new.env" })).toMatchObject({
+      isError: true, body: { code: "invalid" },
+    });
+    expect(server.sent).toEqual([]);
+    expect(server.store.size).toBe(1);
+    expect(await readdir(sibling)).toEqual([]);
+  });
+
+  it("rejects a dangling file symlink without replacing it or consuming", async () => {
+    const outside = await tempDir();
+    const target = join(outside, "missing.env");
+    await symlink(target, join(cwd, ".env.local"));
+    const link = await server.seed("A=1", ORIGIN);
+    expect(await call("pull_stub", { link })).toMatchObject({ isError: true, body: { code: "invalid" } });
+    expect(server.sent).toEqual([]);
+    expect(server.store.size).toBe(1);
+    expect(await readlink(join(cwd, ".env.local"))).toBe(target);
+    expect(await readdir(outside)).toEqual([]);
+  });
+
+  it.each([false, true])("writes through an inside-project symlink, new file=%s", async (newFile) => {
+    await mkdir(join(cwd, "shared"));
+    const target = join(cwd, "shared", "real.env");
+    if (newFile) await symlink("shared", join(cwd, "config"));
+    else {
+      await writeFile(target, "X=1\n");
+      await symlink("shared/real.env", join(cwd, ".env.local"));
+    }
+    const link = await server.seed("A=1", ORIGIN);
+    expect(await call("pull_stub", { link, file: newFile ? "config/real.env" : undefined })).toMatchObject({
+      isError: false, body: { ok: true },
+    });
+    expect(await readFile(target, "utf8")).toBe(newFile ? "A=1\n" : "X=1\nA=1\n");
+    expect((await lstat(join(cwd, newFile ? "config" : ".env.local"))).isSymbolicLink()).toBe(true);
+  });
+
+  it("uses the real project root when the working directory is a symlink", async () => {
+    const alias = join(await tempDir(), "project");
+    await symlink(cwd, alias);
+    await client.close();
+    await connect(alias);
+    const link = await server.seed("A=1", ORIGIN);
+    expect(await call("pull_stub", { link })).toMatchObject({ isError: false, body: { ok: true } });
+    expect(await readFile(join(cwd, ".env.local"), "utf8")).toBe("A=1\n");
+  });
+
+  it("writes the checked canonical target if the original file symlink changes during claim", async () => {
+    const outside = join(await tempDir(), "private.env");
+    await writeFile(outside, "PRIVATE=unchanged\n");
+    const target = join(cwd, "real.env");
+    await writeFile(target, "X=1\n");
+    const alias = join(cwd, ".env.local");
+    await symlink(target, alias);
+    server.onClaim = async () => {
+      await rm(alias);
+      await symlink(outside, alias);
+    };
+    const link = await server.seed("A=1", ORIGIN);
+    expect(await call("pull_stub", { link })).toMatchObject({ isError: false, body: { ok: true } });
+    expect(await readFile(target, "utf8")).toBe("X=1\nA=1\n");
+    expect(await readFile(outside, "utf8")).toBe("PRIVATE=unchanged\n");
   });
 
   it("ignores extra arguments", async () => {

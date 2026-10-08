@@ -70,9 +70,8 @@ function readPullArgs(args: Args, cwd: string): { link: string; file?: string; o
 }
 
 /**
- * An agent's env file belongs in its project. This is a lexical check on the path the client
- * sent, so a caller can't aim the write at an arbitrary location; a symlink the user placed
- * inside the project is their own choice and is left to the git guard.
+ * Reject paths outside the project as written. pullStub also checks the resolved target
+ * against the real project root before claiming, reading, or writing the env file.
  */
 function insideProject(file: string, cwd: string): boolean {
   if (isAbsolute(file)) return false;
@@ -99,7 +98,7 @@ export function createMcpServer(deps: McpDeps): McpServer {
         if (isFailure(origin)) return origin;
         return pullStub(
           { link: input.link, origin, to: input.file, overwrite: input.overwrite },
-          { transport: makeTransport(origin), cwd: deps.cwd, identity: deps },
+          { transport: makeTransport(origin), cwd: deps.cwd, identity: deps, confineToProject: true },
         );
       }),
   );

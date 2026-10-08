@@ -576,9 +576,9 @@ describe("stubs run through the binary", () => {
 
 describe("stubs mcp over stdio", () => {
   /** Sends JSON-RPC lines to `stubs mcp` and returns the raw stdout once `id` answers. */
-  function mcpExchange(messages: object[], waitForId: number): Promise<string> {
+  function mcpExchange(messages: object[], waitForId: number, envOverrides: NodeJS.ProcessEnv = {}): Promise<string> {
     return new Promise((done, failed) => {
-      const env: NodeJS.ProcessEnv = { ...process.env, XDG_CONFIG_HOME: xdg };
+      const env: NodeJS.ProcessEnv = { ...process.env, XDG_CONFIG_HOME: xdg, ...envOverrides };
       const child = track(spawn(process.execPath, [BIN, "mcp"], { cwd, env }));
       let stdout = "";
       const timer = setTimeout(() => {
@@ -598,6 +598,35 @@ describe("stubs mcp over stdio", () => {
       for (const message of messages) child.stdin.write(`${JSON.stringify(message)}\n`);
     });
   }
+
+  it("rejects an outside default env symlink over stdio without a claim or file mutation", async () => {
+    const outside = join(await tempDir(), "private.env");
+    await writeFile(outside, "PRIVATE=unchanged\n");
+    await symlink(outside, join(cwd, ".env.local"));
+    const link = await server.seed(STUB, http.origin);
+    const stdout = await mcpExchange(
+      [
+        {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "0" } },
+        },
+        { jsonrpc: "2.0", method: "notifications/initialized" },
+        { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "pull_stub", arguments: { link } } },
+      ],
+      2,
+      { STUBS_ORIGIN: http.origin },
+    );
+    const response = stdout.split("\n").filter(Boolean).map((line) => JSON.parse(line)).find((message) => message.id === 2);
+    expect(response.result.isError).toBe(true);
+    expect(JSON.parse(response.result.content[0].text)).toMatchObject({ ok: false, code: "invalid" });
+    expect(stdout).not.toContain(CANARY);
+    expect(stdout).not.toContain(link.split("#")[1]);
+    expect(server.sent).toEqual([]);
+    expect(server.store.size).toBe(1);
+    expect(await readFile(outside, "utf8")).toBe("PRIVATE=unchanged\n");
+  });
 
   it("redacts a link sent as a tool name out of the SDK's error", async () => {
     const link = await server.seed(STUB, http.origin);

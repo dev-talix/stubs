@@ -100,6 +100,83 @@ No `push` tool. File paths resolve against the server's working directory. The s
 `STUBS_ORIGIN`. Tool errors are returned as MCP tool results with `isError: true` and the R1
 error object, never thrown.
 
+#### MCP pull boundary, TAL-143
+
+Requirement and owner: TAL-143 requires the MCP-selected env file to stay inside the real
+project directory. The MCP boundary implementer owns this record. CLI target selection,
+git guard policy, recovery storage, and isolation from hostile concurrent filesystem changes
+are outside this change. TAL-142 covers keeping values out of an agent's reach altogether.
+
+Intended and implemented path: `createMcpServer` in `cli/src/mcp.ts` checks the input path
+and enables `PullDeps.confineToProject`. `pullStub` in `cli/src/pull.ts` resolves the project
+root with `realpath(cwd)` and passes it to `resolveTarget`. That resolver checks the canonical
+env target with `checkProjectBoundary` before permission preflight, the git guard, and the
+`revealTicket` claim. The boundary helper handles both existing-file and new-file targets.
+The same canonical target goes to the git guard, `readExisting`, and `writeFileAtomic`.
+Existing file links resolve to the file; a new file resolves through its parent directory.
+A dangling final file symlink is invalid because its canonical destination cannot be checked.
+For MCP, `EACCES` or `EPERM` during target resolution or permission preflight returns a fixed
+`invalid` response. This also covers an inaccessible target inside the project. The
+`projectPermissionFailure` helper handles both resolver error branches; CLI permission errors
+retain their contextual `error` response.
+
+Acceptance examples in `cli/test/mcp.test.ts`: the default `.env.local` and an explicit file
+link outside return `invalid`; an outside parent link for a new file and a sibling whose name
+shares the project prefix return `invalid`. These cases leave the server request list empty,
+the stored stub sealed, and the outside files unchanged. An unreadable outside file and an
+unwritable outside parent also return `invalid` before permission checks. A non-searchable
+outside parent returns `invalid` for existing and new files without sending a request or
+changing the outside directory. A dangling link stays a link and
+doesn't consume. Inside-project file and parent links work, as does a symlinked project cwd.
+Changing the original file link during claim still writes the canonical target checked before
+claim. That last case does not establish protection against concurrent changes to canonical
+parent directories. Failures after claim still use R1 recovery outside the project.
+
+`cli/test/commands.test.ts` verifies that the CLI can still select an outside target and follow
+an outside file symlink. `cli/test/binary.test.ts` exercises default-target rejection through
+the built MCP server on stdio with real HTTP transport and checks that no claim was sent.
+The commands suite also verifies that an inaccessible outside target keeps the CLI's
+permission `error` response without consumption or mutation.
+
+Verification: base commit `51314c631d45378cad7c4405f1b31f789ffea46b`, uncommitted changes on
+`tal-143/mcp-realpath-boundary`, macOS with Node 22.23.2 and host pnpm 12.9.1. The pre-fix run failed
+the five new rejection examples and passed the CLI regression, recorded in
+`/tmp/stubs-tal143-20261008/behavior-red.log`. The post-fix focused run passed 184 tests in
+`behavior-green.log`. The permission-ordering regression failed both new permission cases in
+`permission-red.log`; the revised complete CLI suite passed 429 tests, including the CLI
+build and stdio MCP case, in `cli-suite-revised.log`. Typecheck and site build passed again in
+`typecheck-revised.log` and `site-build-revised.log`. After the final permission-error mapping,
+both non-searchable-parent cases failed before the fix in `search-permission-red.log`, while
+the CLI regression passed. The focused MCP and commands suites now pass all 111 tests in
+`search-permission-green.log`, and repository typecheck passes in
+`typecheck-search-permission.log`. The implementer did not rerun the complete suite or builds after that mapping. Logs and
+uncommitted `dirty.diff` are under `/tmp/stubs-tal143-20261008/`.
+
+Integration verification by the parent: all 739 repository tests passed across 31 files,
+including the CLI, worker and client projects. Root typecheck, CLI build, site build and
+`git diff --check` passed. Logs are
+`/tmp/stubs-card-review-20261008/integration-verified-tests.log`,
+`integration-verified-typecheck.log`, `integration-verified-cli-build.log` and
+`integration-verified-site-build.log` in the same directory. The tested input is pinned by
+`integration-gate-manifest.json`; final changes to this record only reconcile gate metadata.
+Final source reviews reported no remaining findings in `tal143-final-review.json` and
+`tal140-resync-review.json`. The complete final dirty artifacts are `tal143-final.patch`,
+`tal140-final.patch` and `integration-final.patch`. Source and test bytes match the gate
+manifest; Windows console behavior, unsupported paste terminals and deployment were NOT RUN.
+No lint script is configured.
+
+Commands run from the repository root with package-manager auto-install disabled:
+
+```sh
+export npm_config_manage_package_manager_versions=false
+export npm_config_verify_deps_before_run=false
+export PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN=false
+export WRANGLER_SEND_METRICS=false
+node node_modules/vitest/vitest.mjs run --project cli
+pnpm --config.verifyDepsBeforeRun=false typecheck
+pnpm --config.verifyDepsBeforeRun=false build
+```
+
 ### R5 Exit codes
 
 | Code | Meaning | JSON `code` |

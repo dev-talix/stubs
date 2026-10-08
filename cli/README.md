@@ -266,9 +266,14 @@ Starts an MCP server on stdio, named `stubs`, with two tools:
 Both handle locked links with the machine's identity, like the CLI.
 
 There's no push tool. `file` resolves against the server's working directory and must stay
-inside it: an absolute path, or one that climbs above it with `..`, is refused before any
-network call. The server reads `STUBS_ORIGIN` from its environment. Failures come back as tool results with
-`isError: true` and the error object below.
+inside its real directory. Absolute paths, paths that climb above it with `..`, and symlinks
+to files or parent directories outside it are refused before any network call. This includes
+the default `.env.local`. Symlinks within the project work; dangling file symlinks are refused
+without replacing them. The same resolved target is used for the git guard, read, and write.
+This check doesn't isolate the process from concurrent filesystem changes. Recovery after a
+failed write still saves consumed values in the stubs config folder. The CLI's `--to` accepts
+user-chosen outside targets. The server reads `STUBS_ORIGIN` from its environment. Failures
+come back as tool results with `isError: true` and the error object below.
 
 ### `stubs skill install`
 

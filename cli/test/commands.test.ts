@@ -337,6 +337,38 @@ describe("review probes", () => {
     expect(await readFile(join(cwd, "shared", "real.env"), "utf8")).toBe("X=1\nA=1\n");
   });
 
+  it("allows the CLI to choose an outside target or follow an outside symlink", async () => {
+    const outside = await tempDir();
+    const target = join(outside, "chosen.env");
+    let link = await server.seed("A=1", ORIGIN);
+    expect((await pull(link, "--to", target)).code).toBe(0);
+    await symlink(target, join(cwd, ".env.local"));
+    link = await server.seed("B=2", ORIGIN);
+    expect((await pull(link)).code).toBe(0);
+    expect(await readFile(target, "utf8")).toBe("A=1\nB=2\n");
+    expect((await lstat(join(cwd, ".env.local"))).isSymbolicLink()).toBe(true);
+  });
+
+  it.skipIf(process.getuid?.() === 0)("keeps the CLI permission error for an inaccessible outside target", async () => {
+    const outside = await tempDir();
+    const target = join(outside, "private.env");
+    await writeFile(target, "PRIVATE=unchanged\n");
+    await chmod(outside, 0o000);
+    try {
+      const link = await server.seed("A=1", ORIGIN);
+      const result = await pull(link, "--to", target, "--json");
+      expect(result.code).toBe(1);
+      expect(JSON.parse(result.stdout)).toMatchObject({ ok: false, code: "error" });
+      expect(JSON.parse(result.stdout).message).toContain("EACCES");
+      expect(server.sent).toEqual([]);
+      expect(server.store.size).toBe(1);
+    } finally {
+      await chmod(outside, 0o700);
+    }
+    expect(await readFile(target, "utf8")).toBe("PRIVATE=unchanged\n");
+    expect(await readdir(outside)).toEqual(["private.env"]);
+  });
+
   describe("when git can't run", () => {
     const missingGit: GitRunner = async () => ({ code: "failed", stdout: "", stderr: "" });
     const pullWithoutGit = async (link: string) =>

@@ -3,7 +3,7 @@
 // so nothing after the claim refuses. Existing keys are skipped rather than treated as errors.
 
 import { access, constants, lstat, readFile, realpath, stat } from "node:fs/promises";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { revealTicket, type RevealOutcome, type Transport } from "../../src/core/ticket";
 import { isNotFound, mergeEnv, writeFileAtomic, writeRecoveryFile } from "./env-file";
 import { decideGuard, guardMessage, probeGit, type GitFacts } from "./git-guard";
@@ -27,6 +27,8 @@ export interface PullDeps {
   cwd: string;
   /** Where this machine's identity (locked links) and recovery files live. */
   identity: IdentityDeps;
+  /** MCP confines the env target to the real working directory. CLI targets are user-chosen. */
+  confineToProject?: boolean;
   probeGit?: (file: string) => Promise<GitFacts>;
   now?: () => Date;
 }
@@ -49,7 +51,15 @@ export async function pullStub(options: PullOptions, deps: PullDeps): Promise<Pu
   if (isFailure(link)) return link;
 
   const file = options.to ?? DEFAULT_ENV_FILE;
-  const target = await resolveTarget(resolve(deps.cwd, file), file);
+  let project: string | undefined;
+  if (deps.confineToProject) {
+    try {
+      project = await realpath(deps.cwd);
+    } catch (error) {
+      return fail("error", `Can't resolve the project directory (${errorCode(error)}). ${NOTHING_CONSUMED}`);
+    }
+  }
+  const target = await resolveTarget(resolve(deps.cwd, file), file, project);
   if (isFailure(target)) return target;
 
   if (!options.allowTracked) {
@@ -105,29 +115,66 @@ export async function pullStub(options: PullOptions, deps: PullDeps): Promise<Pu
  * target itself when it exists, else its folder. Everything that can fail is checked here,
  * before the claim.
  */
-async function resolveTarget(path: string, file: string): Promise<string | Failure> {
+async function resolveTarget(path: string, file: string, project?: string): Promise<string | Failure> {
   try {
     const existing = await stat(path);
     if (!existing.isFile()) return fail("invalid", `${file} isn't a regular file. ${NOTHING_CONSUMED}`);
     const real = await realpath(path);
+    const boundary = checkProjectBoundary(real, project);
+    if (boundary) return boundary;
     await access(real, constants.R_OK);
     await access(dirname(real), constants.W_OK);
     return real;
   } catch (error) {
+    const permission = projectPermissionFailure(error, project);
+    if (permission) return permission;
     if (!isNotFound(error)) {
       return fail("error", `Can't read or replace ${file} (${errorCode(error)}). ${NOTHING_CONSUMED}`);
     }
   }
 
   try {
+    // A missing file and a dangling symlink both make stat fail with ENOENT. MCP cannot
+    // check a dangling link's real target, so refuse instead of reading through it later.
+    if (project !== undefined) {
+      const entry = await lstat(path).catch((error: unknown) => {
+        if (isNotFound(error)) return null;
+        throw error;
+      });
+      if (entry?.isSymbolicLink()) {
+        return fail("invalid", `${file} is a symlink whose target doesn't exist. ${NOTHING_CONSUMED}`);
+      }
+    }
     const dir = await realpath(dirname(path));
     if (!(await stat(dir)).isDirectory()) throw Object.assign(new Error(), { code: "ENOTDIR" });
+    const target = join(dir, basename(path));
+    const boundary = checkProjectBoundary(target, project);
+    if (boundary) return boundary;
     await access(dir, constants.W_OK);
-    return join(dir, basename(path));
+    return target;
   } catch (error) {
+    const permission = projectPermissionFailure(error, project);
+    if (permission) return permission;
     if (isNotFound(error)) return fail("invalid", `The folder for ${file} doesn't exist. ${NOTHING_CONSUMED}`);
     return fail("error", `Can't create ${file} (${errorCode(error)}). ${NOTHING_CONSUMED}`);
   }
+}
+
+/** MCP cannot use a target denied by the filesystem; CLI keeps its contextual errors. */
+function projectPermissionFailure(error: unknown, project?: string): Failure | null {
+  const code = errorCode(error);
+  if (project === undefined || (code !== "EACCES" && code !== "EPERM")) return null;
+  return fail("invalid", `The env file or its folder can't be accessed. ${NOTHING_CONSUMED}`);
+}
+
+/** Check both resolved-file and resolved-parent targets before permission preflight. */
+function checkProjectBoundary(target: string, project?: string): Failure | null {
+  if (project === undefined) return null;
+  const rel = relative(project, target);
+  if (rel === "" || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
+    return fail("invalid", `The env file must stay inside the project directory, including symlink targets. ${NOTHING_CONSUMED}`);
+  }
+  return null;
 }
 
 async function readExisting(path: string): Promise<Buffer | null> {

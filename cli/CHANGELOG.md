@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- MCP `pull_stub` checks its resolved env target against the real project directory before
+  opening a stub. File symlinks and parent symlinks that point outside are refused, including
+  the default `.env.local`. Dangling file symlinks are refused without replacing them.
+  Symlinks within the project still work. The CLI's user-chosen `--to` targets are unchanged.
+
 ## 0.4.0
 
 - `stubs run -- <cmd>` runs a command with the env file's values in its environment and
