@@ -15,6 +15,10 @@ const NODE = process.execPath;
 const SECRET = "hunter2-9f3a";
 const DB_URL = "postgres://app:s3cretpw@db.internal:5432/app";
 const posix = process.platform !== "win32";
+const REFUSED_ADDITIONS = [
+  "CC", "CXX", "ERL_AFLAGS", "ERL_FLAGS", "ERL_ZFLAGS", "LUA_INIT", "LUA_INIT_5_4", "LUA_INIT_5_5",
+  "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "DOCKER_HOST",
+].flatMap((key) => [key, key.toLowerCase()]);
 
 let cwd: string;
 beforeEach(async () => {
@@ -193,8 +197,25 @@ describe("stubs run", () => {
       code: 125,
       stdout: "",
       stderr:
-        "stubs: NODE_OPTIONS, npm_config_node_options, GIT_CONFIG_COUNT, ZDOTDIR can't come from an env file: keys like that change which code programs run. Take them out of the file, or set them in your shell on purpose.\n",
+        "stubs: NODE_OPTIONS, npm_config_node_options, GIT_CONFIG_COUNT, ZDOTDIR can't come from an env file: keys like that can change which code programs run or where they send traffic. Take them out of the file, or set them in your shell on purpose.\n",
     });
+  });
+
+  it.each(REFUSED_ADDITIONS)("refuses %s from a file before the command starts", async (key) => {
+    await writeFile(join(cwd, ".env.local"), `${key}=${SECRET}\n`);
+    const result = await node(`require("node:fs").writeFileSync("started", "yes"); console.log(process.env[${JSON.stringify(key)}]);`);
+    expect(result.code).toBe(125);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain(`${key} can't come from an env file`);
+    expect(result.stdout + result.stderr).not.toContain(SECRET);
+    expect(await readdir(cwd)).toEqual([".env.local"]);
+  });
+
+  it.each(REFUSED_ADDITIONS)("keeps deliberately supplied shell %s", async (key) => {
+    const result = await run(["--", NODE, "-e", `console.log(process.env[${JSON.stringify(key)}] === "shell-config-value")`], {
+      env: { [key]: "shell-config-value" },
+    });
+    expect(result).toEqual({ code: 0, stdout: "true\n", stderr: "" });
   });
 
   it("reads other files with --from, in order", async () => {
@@ -322,7 +343,10 @@ describe("isRefusedKey", () => {
     expect(isRefusedKey(key)).toBe(true);
   });
 
-  it.each(["NODE_ENV", "API_KEY", "DATABASE_URL", "PORT", "GITHUB_TOKEN", "NEXT_PUBLIC_URL", "PATHWAY"])("allows %s", (key) => {
+  it.each([
+    "NODE_ENV", "node_env", "API_KEY", "DATABASE_URL", "PORT", "GITHUB_TOKEN", "NEXT_PUBLIC_URL", "PATHWAY",
+    "LUA_INITIAL_STATE", "LUA_INITIATIVE", "HTTP_PROXY_URL",
+  ])("allows %s", (key) => {
     expect(isRefusedKey(key)).toBe(false);
   });
 });

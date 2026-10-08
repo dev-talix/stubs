@@ -152,16 +152,19 @@ How it works:
   and the message names the key. Two sources of truth is how a test runs against the wrong
   database; unset the key (`env -u KEY stubs run ...`) or take it out of the file. The same
   key with the same value is fine.
-- Keys that change which code a program runs, rather than how it behaves, stop the run too:
+- The following known keys that select code or redirect traffic stop the run too:
   anything starting with `LD_`, `DYLD_`, `NODE_` (except `NODE_ENV`), `NPM_CONFIG_`, `YARN_`,
   `PNPM_`, `BUN_`, `PYTHON`, `PERL`, `RUBY`, `GEM_`, `BUNDLE_`, `GIT_`, `JAVA_`, `_JAVA_`,
-  `JDK_JAVA_`, `DOTNET_`, or `XDG_`, and `PATH`, `HOME`, `SHELL`, `ENV`, `BASH_ENV`,
+  `JDK_JAVA_`, `DOTNET_`, `XDG_`, or `LUA_INIT_`, and `PATH`, `HOME`, `SHELL`, `ENV`, `BASH_ENV`,
   `ZDOTDIR`, `SHELLOPTS`, `BASHOPTS`, `IFS`, `PS4`, `PROMPT_COMMAND`, `CDPATH`, `CLASSPATH`,
-  `PAGER`, `MANPAGER`, `EDITOR`, `VISUAL`, `BROWSER`, `LESSOPEN`, and `LESSCLOSE`, in any
-  case. A stub could otherwise use them to run its own code on the machine that pulls it: a
-  `GIT_CONFIG_*` triple that sets `core.sshCommand`, say, or `npm_config_node_options`. The
-  list is wide on purpose and it's still a blocklist; a value the command reads and acts on
-  itself is up to the command.
+  `PAGER`, `MANPAGER`, `EDITOR`, `VISUAL`, `BROWSER`, `LESSOPEN`, `LESSCLOSE`, `CC`, `CXX`,
+  `ERL_AFLAGS`, `ERL_FLAGS`, `ERL_ZFLAGS`, `LUA_INIT`, `HTTP_PROXY`, `HTTPS_PROXY`,
+  `ALL_PROXY`, and `DOCKER_HOST`, in any case, including lowercase proxy names. `LUA_INIT_`
+  covers versioned startup hooks such as `LUA_INIT_5_4`. These keys can make supported tools
+  load code, select another executable, or send traffic to another destination. To configure
+  them deliberately, remove them from the env file and set them in your shell before running
+  `stubs run`. The list covers these known keys; other hooks and application-specific
+  configuration remain possible. It does not sandbox the command or prevent network access.
 - Masking works on bytes, so binary output passes through, and a value split across two
   writes is still caught: a chunk that ends with the start of a value is held until the rest
   arrives or the command exits, however long that takes. There is no timer that lets it out
@@ -470,9 +473,9 @@ What it protects:
   across writes with any pause between them and the encodings listed above, so a tool that
   dumps its config on error leaves `[stubs:KEY]` in the transcript, not the secret. Its own
   messages never repeat the command or a file name. There's no flag that turns masking off.
-- `run` refuses the loader hooks and config locations listed above, so a stub can't use them
-  to run its own code on the machine that pulls it, and refuses a key your environment already
-  sets to something else. Its own flag is `--from`, which Node doesn't read, so the file is
+- `run` refuses the keys listed above that select code or redirect traffic when they come
+  from an env file, and refuses a key your environment already sets to something else. Its own
+  flag is `--from`, which Node doesn't read, so the file is
   never loaded into `stubs`. The command's process group is stopped when the command exits,
   when `stubs` gets a termination signal, when the reader goes away, and when `stubs`
   crashes, with `SIGKILL` for anything that ignores `SIGTERM`.

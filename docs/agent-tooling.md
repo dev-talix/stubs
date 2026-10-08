@@ -331,12 +331,18 @@ environment on error, so the pulled values would land in the transcript anyway (
    value is fine. Keys matched by the refusal list in `cli/src/run.ts` (prefixes `LD_`,
    `DYLD_`, `NODE_` except `NODE_ENV`, `NPM_CONFIG_`, `YARN_`, `PNPM_`, `BUN_`, `PYTHON`,
    `PERL`, `RUBY`, `GEM_`, `BUNDLE_`, `GIT_`, `JAVA_`, `_JAVA_`, `JDK_JAVA_`, `DOTNET_`,
-   `XDG_`; names `PATH`, `HOME`, `SHELL`, `ENV`, `BASH_ENV`, `ZDOTDIR`, `SHELLOPTS`,
+   `XDG_`, `LUA_INIT_`; names `PATH`, `HOME`, `SHELL`, `ENV`, `BASH_ENV`, `ZDOTDIR`, `SHELLOPTS`,
    `BASHOPTS`, `IFS`, `PS4`, `PROMPT_COMMAND`, `CDPATH`, `CLASSPATH`, `PAGER`, `MANPAGER`,
-   `EDITOR`, `VISUAL`, `BROWSER`, `LESSOPEN`, `LESSCLOSE`; case-insensitive) stop the run the
-   same way, so a hostile stub can't use `GIT_CONFIG_*`, `npm_config_node_options`, or
-   `ZDOTDIR` to make the command run its code. It's a blocklist, so it closes the known hooks,
-   not every possible one.
+   `EDITOR`, `VISUAL`, `BROWSER`, `LESSOPEN`, `LESSCLOSE`, `CC`, `CXX`, `ERL_AFLAGS`,
+   `ERL_FLAGS`, `ERL_ZFLAGS`, `LUA_INIT`, `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`,
+   `DOCKER_HOST`; case-insensitive, including lowercase proxy names) stop the run the same
+   way. `LUA_INIT_` covers versioned startup hooks such as `LUA_INIT_5_4`. These known keys can
+   select code or redirect supported tools' traffic. The diagnostic names only keys and says
+   they can change which code programs run or where they send traffic. Deliberate shell
+   configuration remains available: remove the key from the env file and set it in the shell
+   before `stubs run`. This is a blocklist for these known keys. Other hooks and
+   application-specific configuration remain possible; it does not sandbox the command or
+   prevent network access.
 3. Spawns the command with stdin inherited and stdout and stderr piped through a masker, one
    per stream, into this process's stdout and stderr. On POSIX the command gets its own
    process group (`detached`), which also drops its controlling terminal. That group is what
@@ -408,6 +414,18 @@ environment on error, so the pulled values would land in the transcript anyway (
    kept), a short command returning in under a second, a relay error against a command that
    handles it and ignores `SIGTERM`, and a `GIT_CONFIG_*` stub against real `git`. Every spawned process is killed in teardown
    (`cli/test/helpers/leftovers.ts`), so a failing test can't leave one behind.
+   TAL-144 adds per-key upper- and lowercase cases in `cli/test/run.test.ts` for the added
+   execution and traffic keys, including versioned Lua hooks. Each requires exit `125`, no
+   value in either stream, and no child-created marker file. Separate cases preserve the
+   deliberate shell route; classifier regressions preserve `NODE_ENV` and unrelated names.
+
+TAL-144 validation owner: the env-policy implementer. On macOS with Node 22.23.2, base
+`51314c6` plus the working diff, `node node_modules/vitest/vitest.mjs run --project cli
+cli/test/run.test.ts` passed all 116 tests, and CLI `tsc -p cli/tsconfig.json --noEmit` passed
+with its build-info file in `/tmp`. The focused built-binary refusal case passed with a direct
+`cli/build.mjs` build; normal pnpm invocation was blocked by its dependency-symlink check.
+Logs and `dirty.diff` are in `/tmp/stubs-tal144-implementation-20261008/`. The integration
+owner must check the combined stack; the full suite and root typecheck were not run here.
 
    TAL-145 covers npm launcher compatibility in `cli/test/launcher.test.ts`. It packs the
    local build, installs into a private project with spaces in its path, and checks the

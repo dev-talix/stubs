@@ -25,21 +25,22 @@ export const EXIT_NOT_FOUND = 127;
 const EXIT_READER_GONE = 128 + osConstants.signals.SIGPIPE;
 
 /**
- * Keys an env file is never allowed to set on the command, because they change which code a
- * program runs rather than how it behaves: the dynamic loader, each runtime's startup hooks
- * and module paths, the shells' startup files, the config locations git and the package
- * managers read commands from, and the programs tools hand control to (pager, editor).
+ * Known env keys that select code or redirect traffic: dynamic loaders, runtime startup hooks
+ * and module paths, shell startup files, config locations that tools read commands from,
+ * programs tools hand control to (compiler, pager, editor), proxies, and the Docker daemon.
+ * Only file-supplied values are checked; deliberate shell configuration remains available.
  * Matched case-insensitively, since Windows names are. The prefixes are wide on purpose: a run
  * refused over NODE_NO_WARNINGS costs one message; a loader hook that gets through costs the
  * machine. It's still a blocklist, and the docs say so.
  */
 const REFUSED_PREFIXES = [
   "LD_", "DYLD_", "NODE_", "NPM_CONFIG_", "YARN_", "PNPM_", "BUN_", "PYTHON", "PERL", "RUBY", "GEM_", "BUNDLE_",
-  "GIT_", "JAVA_", "_JAVA_", "JDK_JAVA_", "DOTNET_", "XDG_",
+  "GIT_", "JAVA_", "_JAVA_", "JDK_JAVA_", "DOTNET_", "XDG_", "LUA_INIT_",
 ];
 const REFUSED_NAMES = new Set([
   "PATH", "HOME", "SHELL", "ENV", "BASH_ENV", "ZDOTDIR", "SHELLOPTS", "BASHOPTS", "IFS", "PS4", "PROMPT_COMMAND",
   "CDPATH", "CLASSPATH", "PAGER", "MANPAGER", "EDITOR", "VISUAL", "BROWSER", "LESSOPEN", "LESSCLOSE",
+  "CC", "CXX", "ERL_AFLAGS", "ERL_FLAGS", "ERL_ZFLAGS", "LUA_INIT", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "DOCKER_HOST",
 ]);
 /** The one NODE_ name that is app config, not a Node hook. */
 const ALLOWED_NAMES = new Set(["NODE_ENV"]);
@@ -88,8 +89,8 @@ export interface LoadedEnv {
  * Reads the env files. Every value in them is masked, whichever one the command ends up with:
  * a key set twice, values in the comments `pull` leaves behind (skipped, held back, unparsed),
  * and lines the parser can't read (an unclosed quote). A key matched by the refusal list, or
- * one the environment already sets to something else, stops the run: the first could make the
- * command load the stub's code, and the second has two sources of truth.
+ * one the environment already sets to something else, stops the run: the first could select
+ * code or redirect traffic, and the second has two sources of truth.
  */
 export async function loadEnvFiles(files: string[], deps: Pick<RunDeps, "cwd" | "env">): Promise<LoadedEnv | Failure> {
   const values = new Map<string, string>();
@@ -131,7 +132,7 @@ export async function loadEnvFiles(files: string[], deps: Pick<RunDeps, "cwd" | 
   }
   if (refused.size > 0) {
     const [list, it] = named(refused);
-    return fail("refused", `${list} can't come from an env file: keys like that change which code programs run. Take ${it} out of the file, or set ${it} in your shell on purpose.`);
+    return fail("refused", `${list} can't come from an env file: keys like that can change which code programs run or where they send traffic. Take ${it} out of the file, or set ${it} in your shell on purpose.`);
   }
   if (conflicting.size > 0) {
     const [list, it] = named(conflicting);
