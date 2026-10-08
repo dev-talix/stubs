@@ -109,7 +109,7 @@ describe("the packed npm launcher", () => {
     expect(installed.code, installed.stderr).toBe(0);
     const result = await execute(join(cwd, "node_modules", ".bin", "stubs.cmd"), ["--version"], cwd, env);
     expect(result.code, result.stderr).not.toBe(0);
-    expect(result.stderr).toMatch(/'sh' is not recognized/);
+    expect(result.stderr).toMatch(/'(?:sh|"sh")' is not recognized/);
   }, 60_000);
 });
 
