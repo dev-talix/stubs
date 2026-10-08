@@ -9,6 +9,23 @@ async function readStdin(): Promise<string> {
   return Buffer.concat(chunks).toString("utf8");
 }
 
+// A crash must never turn into a stack trace: an error object could carry anything the command
+// was holding. This covers errors thrown outside the promise chain below (stream errors, and
+// anything a dependency throws from a callback). process.exit runs the `exit` handlers, which
+// is where `stubs run` kills whatever it was running.
+const crashed = () => {
+  process.stderr.write("stubs: unexpected error.\n");
+  process.exit(1);
+};
+process.on("uncaughtException", crashed);
+process.on("unhandledRejection", crashed);
+// Our reader went away (`stubs --help | head -1`): stop quietly instead of crashing.
+for (const stream of [process.stdout, process.stderr]) {
+  stream.on("error", (error: NodeJS.ErrnoException) => {
+    if (error.code !== "EPIPE") crashed();
+  });
+}
+
 run(process.argv.slice(2), {
   stdout: (text) => process.stdout.write(text),
   stderr: (text) => process.stderr.write(text),
@@ -17,6 +34,7 @@ run(process.argv.slice(2), {
   home: homedir(),
   makeTransport: (origin) => (path, init) => fetch(origin + path, init),
   readStdin,
+  run: { stdout: process.stdout, stderr: process.stderr, stdin: "inherit" },
 }).then(
   (code) => {
     process.exitCode = code;

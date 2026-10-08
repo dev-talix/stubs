@@ -43,7 +43,7 @@
               <p class="lede">Stubs encrypts in your browser, so it needs JavaScript to run.</p>
               <p class="fine">
                 Script or agent? Don't parse this page. Run
-                <code>npx -y @talix/stubs@{{STUBS_CLI_VERSION}} pull &lt;this link&gt;</code> to write the values into
+                <code>npx -y --loglevel=warn -- @talix/stubs@{{STUBS_CLI_VERSION}} pull &lt;this link&gt;</code> to write the values into
                 .env.local; it prints only the key names. Details: https://stubs.talix.app/llms.txt
               </p>
             </noscript>
@@ -67,12 +67,12 @@
           </p>
           <div class="snippet">
             <span class="snippet-label">Install the skill (Claude Code, Codex)</span>
-            <pre><code id="snippet-skill">npx -y @talix/stubs@{{STUBS_CLI_VERSION}} skill install</code></pre>
+            <pre><code id="snippet-skill">npx -y --loglevel=warn -- @talix/stubs@{{STUBS_CLI_VERSION}} skill install</code></pre>
             <button type="button" class="copy" data-copy="snippet-skill">COPY</button>
           </div>
           <div class="snippet">
             <span class="snippet-label">Pull a stub</span>
-            <pre><code id="snippet-pull">npx -y @talix/stubs@{{STUBS_CLI_VERSION}} pull &lt;link&gt;</code></pre>
+            <pre><code id="snippet-pull">npx -y --loglevel=warn -- @talix/stubs@{{STUBS_CLI_VERSION}} pull &lt;link&gt;</code></pre>
             <button type="button" class="copy" data-copy="snippet-pull">COPY</button>
           </div>
           <div class="snippet">
@@ -82,12 +82,12 @@
           </div>
           <div class="snippet">
             <span class="snippet-label">Or add to AGENTS.md</span>
-            <pre><code id="snippet-agents">When given a link on stubs.talix.app, run `npx -y @talix/stubs@{{STUBS_CLI_VERSION}} pull &lt;link&gt;` (or the `pull_stub` tool). It writes the values into .env.local and prints only the key names. Never cat, read, or print .env* files.</code></pre>
+            <pre><code id="snippet-agents">When given a link on stubs.talix.app, run `npx -y --loglevel=warn -- @talix/stubs@{{STUBS_CLI_VERSION}} pull &lt;link&gt;` (or the `pull_stub` tool). It writes the values into .env.local and prints only the key names. Never cat, read, or print .env* files.</code></pre>
             <button type="button" class="copy" data-copy="snippet-agents">COPY</button>
           </div>
           <p>
             To lock a stub to one machine, the recipient runs
-            <code>npx -y @talix/stubs@{{STUBS_CLI_VERSION}} init</code> once and shares the id it prints. Full docs:
+            <code>npx -y --loglevel=warn -- @talix/stubs@{{STUBS_CLI_VERSION}} init</code> once and shares the id it prints. Full docs:
             <a href="https://www.npmjs.com/package/@talix/stubs">npmjs.com/package/@talix/stubs</a>.
           </p>
         </section>

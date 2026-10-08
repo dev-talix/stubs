@@ -3,6 +3,7 @@
 // redacts links, fragments, keys, and ids (R6); the only exceptions are the payloads a command
 // exists to print: the link from `push` and the public id from `init`/`id`.
 
+import type { Writable } from "node:stream";
 import { parseArgs, type ParseArgsConfig } from "node:util";
 import { withClient } from "../../src/core/api";
 import type { Transport } from "../../src/core/ticket";
@@ -13,6 +14,7 @@ import { startMcpServer } from "./mcp";
 import { pullStub, type PullSuccess } from "./pull";
 import { pushStub, type PushSuccess } from "./push";
 import { redact, redactDeep } from "./redact";
+import { EXIT_RUN_FAILED, runCommand } from "./run";
 import { installSkill, isSkillTarget, renderSkill, targetLabel, tildePath, type InstallSuccess } from "./skill";
 import { exitCodeFor, fail, isFailure, type Failure } from "./result";
 import { packageVersion, readPackageVersion } from "./version";
@@ -25,6 +27,11 @@ export interface Io {
   home: string;
   makeTransport: (origin: string) => Transport;
   readStdin: () => Promise<string>;
+  /**
+   * For `stubs run`: where the command's output goes (through the masker, not the redactor,
+   * which would blank every URL in a test run) and what it gets as stdin.
+   */
+  run: { stdout: Writable; stderr: Writable; stdin: "inherit" | "ignore" };
   /** Package version for the skill; undefined reads package.json, null simulates a failure. */
   version?: string | null;
 }
@@ -38,6 +45,14 @@ Usage:
       Refuses (exit 5) if git would not ignore the file, unless --allow-tracked.
       With -, the link is read from stdin (pbpaste | stubs pull -), so it never sits in
       the process list or your shell history.
+
+  stubs run [--from <file>]... -- <cmd> [args...]
+      Run <cmd> with the values from <file> (default .env.local) in its environment, and
+      replace every one of those values in its output with [stubs:KEY]. Values shorter than
+      6 characters (true, 3000) aren't masked. There's no flag to show the values; open the
+      file yourself. A key already set in your environment, or one that changes which code
+      programs run (NODE_OPTIONS, LD_PRELOAD, GIT_*...), stops the run. Exit code is the
+      command's own; 125 if stubs failed, 126 if <cmd> isn't executable, 127 if it isn't found.
 
   stubs check <link>|- [--origin <url>] [--json]
       Say whether the stub is still sealed, without opening it.
@@ -57,8 +72,9 @@ Usage:
       Run an MCP server on stdio with the pull_stub and check_stub tools.
 
   stubs skill show
-  stubs skill install [--target claude|codex] [--force] [--json]
+  stubs skill install [--target claude|codex] [--force] [--protect] [--json]
       Print or install the agent skill that teaches Claude Code and Codex to pull stubs safely.
+      --protect also denies Claude Code's file tools reading .env and .env.* files.
       Run \`stubs skill --help\` for details.
 
 Options:
@@ -78,13 +94,20 @@ Usage:
   stubs skill show
       Print the skill (SKILL.md), pinned to this version of @talix/stubs.
 
-  stubs skill install [--target claude|codex] [--force] [--json]
+  stubs skill install [--target claude|codex] [--force] [--protect] [--json]
       Install it as skills/stubs/SKILL.md for each agent:
         claude  ~/.claude/skills/stubs/SKILL.md
         codex   $CODEX_HOME/skills/stubs/SKILL.md (default ~/.codex)
       Without --target, installs for each agent whose home folder exists. Repeat --target for
       both. An older stubs skill is updated in place; any other file at that path is left alone
       (exit 5) unless --force.
+      --protect also adds permission rules to ~/.claude/settings.json ($CLAUDE_CONFIG_DIR is
+      honoured) that deny Claude Code reading .env and .env.* files and the stubs config
+      folder. The rules cover the Read, Edit, and Write tools, and cat, head, tail, sed, and
+      tee in Bash; not a script that opens the file itself. Existing settings are kept; a file
+      that isn't valid JSON, or that has a Read exception after the stubs rules, is left alone
+      (exit 5) and the rules are printed to add by hand. Codex has no equivalent rule; see the
+      README.
 `;
 
 type Options = NonNullable<ParseArgsConfig["options"]>;
@@ -106,8 +129,13 @@ const COMMANDS: Record<string, Options> = {
     json: COMMON.json!,
     help: COMMON.help!,
     force: { type: "boolean" },
+    protect: { type: "boolean" },
     target: { type: "string", multiple: true },
   },
+  // Not --env-file: Node reads that flag itself, anywhere on the command line before --, and
+  // would load the file into this process before any of this code runs. The launcher in
+  // dist/stubs.js puts a -- in front of the script so a typo can't do that either.
+  run: { help: COMMON.help!, from: { type: "string", multiple: true } },
 };
 
 /** Flags a parse error may name back; anything else is "an unknown flag", since it could be a link. */
@@ -147,7 +175,8 @@ type Values = Record<string, Value>;
 export async function run(argv: string[], io: Io): Promise<number> {
   const out = output(io);
   const [command, ...rest] = argv;
-  const wantsJson = argv.includes("--json");
+  // `run` has no --json of its own; one after -- belongs to the command.
+  const wantsJson = command !== "run" && argv.includes("--json");
 
   if (command === undefined || command === "help" || command === "--help" || command === "-h") {
     (command === undefined ? out.stderr : out.stdout)(USAGE);
@@ -166,13 +195,25 @@ export async function run(argv: string[], io: Io): Promise<number> {
   try {
     ({ values, positionals } = parseArgs({ args: rest, options, allowPositionals: true, strict: true }));
   } catch (error) {
-    return report(fail("invalid", argumentError(error, command)), wantsJson, out);
+    const code = report(fail("invalid", argumentError(error, command)), wantsJson, out);
+    return command === "run" ? EXIT_RUN_FAILED : code;
   }
   if (values.help) {
     out.stdout(command === "skill" ? SKILL_USAGE : USAGE);
     return 0;
   }
   const json = values.json === true;
+
+  if (command === "run") {
+    const envFiles = Array.isArray(values.from) ? values.from.map(String) : undefined;
+    const result = await runCommand(
+      { command: positionals, envFiles },
+      { cwd: io.cwd, env: io.env, ...io.run, warn: (message) => out.stderr(`stubs: ${message}\n`) },
+    );
+    if (typeof result === "number") return result;
+    out.stderr(`stubs: ${result.message}\n`);
+    return result.exitCode ?? EXIT_RUN_FAILED;
+  }
 
   const identity = { env: io.env, home: io.home };
 
@@ -244,7 +285,7 @@ async function runSkill(positionals: string[], values: Values, io: Io, out: Outp
   }
 
   if (sub === "show") {
-    if (extra.length > 0 || values.target !== undefined || values.force || json) {
+    if (extra.length > 0 || values.target !== undefined || values.force || values.protect || json) {
       return report(fail("invalid", "skill show takes no options. Run `stubs skill --help`."), json, out);
     }
     const rendered = renderSkill(version);
@@ -262,7 +303,7 @@ async function runSkill(positionals: string[], values: Values, io: Io, out: Outp
       return report(fail("invalid", "--target must be claude or codex. Run `stubs skill --help`."), json, out);
     }
     const result = await installSkill(
-      { targets: requested.filter(isSkillTarget), force: values.force === true },
+      { targets: requested.filter(isSkillTarget), force: values.force === true, protect: values.protect === true },
       { home: io.home, cwd: io.cwd, env: io.env, version },
     );
     return report(result, json, out);
@@ -295,6 +336,15 @@ function describe(result: Success, out: Output): void {
     const verbs = { installed: "Installed for", updated: "Updated for", unchanged: "Already up to date for" };
     for (const item of result.installed) {
       out.stdout(`${verbs[item.status]} ${targetLabel(item.target)}: ${tildePath(item.path, out.home)}\n`);
+    }
+    for (const item of result.protected ?? []) {
+      if (item.target === "codex") {
+        out.stdout("Codex: no deny rule installed; it has no equivalent setting (see the README).\n");
+      } else if (item.status === "unchanged") {
+        out.stdout(`Claude Code's file tools already deny .env reads: ${tildePath(item.path, out.home)}\n`);
+      } else {
+        out.stdout(`Claude Code's file tools now deny .env reads: ${tildePath(item.path, out.home)} (added ${item.rules.join(", ")})\n`);
+      }
     }
     return;
   }
@@ -346,6 +396,10 @@ function argumentError(error: unknown, command: string): string {
   const flag = typed && KNOWN_FLAGS.has(typed) ? typed : undefined;
   const code = typeof error === "object" && error !== null && "code" in error ? error.code : undefined;
   if (code === "ERR_PARSE_ARGS_UNKNOWN_OPTION") {
+    if (command === "run" && typed?.startsWith("--env-file")) {
+      return `stubs run doesn't take --env-file: that's a Node flag, and Node would read the file itself. Use --from <file>. ${help}`;
+    }
+    if (command === "run" && !flag) return `stubs run was given an unknown flag. Put -- before the command: stubs run -- <cmd> [args]. ${help}`;
     return flag ? `stubs ${command} doesn't take ${flag}. ${help}` : `stubs ${command} was given an unknown flag. ${help}`;
   }
   if (code === "ERR_PARSE_ARGS_INVALID_OPTION_VALUE") return `Bad value for ${flag ?? "an option"}. ${help}`;

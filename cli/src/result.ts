@@ -16,6 +16,8 @@ export interface Failure {
   message: string;
   /** Where pulled values were saved when the target couldn't be written. */
   recoveredFile?: string;
+  /** For `run`, which follows env(1) rather than the table below: 126 or 127. */
+  exitCode?: number;
 }
 
 const EXIT_CODES: Record<FailureCode, number> = {

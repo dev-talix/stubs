@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { generateIdentity } from "../../src/core/lock";
 import { createIdentity } from "../src/identity";
 import { createMcpServer } from "../src/mcp";
+import { readPackageVersion } from "../src/version";
 import { fakeServer, type FakeServer } from "./helpers/fake-server";
 import { ORIGIN } from "./helpers/run";
 import { useTempDirs } from "./helpers/temp";
@@ -40,7 +41,7 @@ describe("mcp server", () => {
     expect(tools.map((tool) => tool.name).sort()).toEqual(["check_stub", "pull_stub"]);
     const pull = tools.find((tool) => tool.name === "pull_stub")!;
     expect(pull.description).toBe(
-      "Open a one-time Stubs link and write its values into the project's env file. Returns key names only. Never read or print the env file afterwards.",
+      `Open a one-time Stubs link and write its values into the project's env file. Returns key names only. Never read or print the env file afterwards; run commands that need the values with \`npx -y --loglevel=warn -- @talix/stubs@${readPackageVersion()} run -- <cmd>\`, which masks them in the output.`,
     );
     expect(Object.keys(pull.inputSchema.properties ?? {}).sort()).toEqual(["file", "link", "overwrite"]);
   });

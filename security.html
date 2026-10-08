@@ -136,7 +136,7 @@
               <p>An ordinary link works for anyone who has it. A locked link opens on one machine only.</p>
               <ul>
                 <li>
-                  The recipient runs <code>npx -y @talix/stubs@{{STUBS_CLI_VERSION}} init</code>
+                  The recipient runs <code>npx -y --loglevel=warn -- @talix/stubs@{{STUBS_CLI_VERSION}} init</code>
                   once. It creates an X25519 key pair in <code>~/.config/stubs/identity</code>, or
                   under <code>$XDG_CONFIG_HOME/stubs/</code> if that's set (file mode 0600, folder
                   0700), and prints a public id that starts with
@@ -260,7 +260,19 @@
                 </li>
                 <li>
                   Tools that print their environment. A tool that prints its environment on error
-                  can leak a value into an agent's transcript. Work on this is in progress.
+                  can leak a value into an agent's transcript. Run it as
+                  <code>npx -y --loglevel=warn -- @talix/stubs@{{STUBS_CLI_VERSION}} run -- &lt;command&gt;</code>
+                  and stubs swaps each value for <code>[stubs:KEY]</code> in its output, including
+                  common base64, URL and JSON forms. That stops accidents, not an agent that's
+                  trying: a script can still open the file, write to the terminal device directly,
+                  or print a value in an encoding stubs doesn't know.
+                </li>
+                <li>
+                  An agent that reads the file on purpose. An agent runs as you, so it can read
+                  anything you can, including <code>.env.local</code>.
+                  <code>skill install --protect</code> adds Claude Code deny rules for
+                  <code>.env*</code> files, but those don't cover files a script opens. Keeping
+                  values where an agent can't read them is planned, not built.
                 </li>
                 <li>
                   A compromised machine on either end. Malware, or a browser extension that can

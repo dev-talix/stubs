@@ -74,27 +74,48 @@ No data point carries an id, link, key, claim secret, ciphertext, size, IP or us
 
 ## For agents
 
-An agent handed a stubs link can move the values into a project without ever seeing them.
-[`@talix/stubs`](cli/README.md) opens the link, writes the values into `.env.local`, and prints
-only the key names. It runs as a CLI or as an MCP server for Claude Code, Cursor, and Codex.
-A stub can also be locked to one machine: the recipient runs `npx -y @talix/stubs@0.3.0 init` once
+An agent handed a stubs link can move the values into a project, use them, and pass them on
+without the values landing in its transcript. [`@talix/stubs`](cli/README.md) has three
+commands for that:
+`pull` opens the link, writes the values into `.env.local`, and prints only the key names;
+`run -- <cmd>` runs tests, dev servers, and scripts with those values and replaces every one of
+them in the output with `[stubs:KEY]`; `push` seals the file into a new link without printing
+it. It runs as a CLI or as an MCP server for Claude Code, Cursor, and Codex.
+A stub can also be locked to one machine: the recipient runs `npx -y --loglevel=warn -- @talix/stubs@0.4.0 init` once
 and shares the id it prints; the sender pastes it into "Lock to a recipient". A locked link is
 useless without that machine's identity, so it's safe to leave in a chat with an agent.
 The simplest setup is the agent skill, which works across every project:
 
 ```bash
-npx -y @talix/stubs@0.3.0 skill install
+npx -y --loglevel=warn -- @talix/stubs@0.4.0 skill install
 ```
 
-Or add this to a project's `AGENTS.md`:
+Add `--protect` to also give Claude Code a permission rule that denies its file tools reading
+`.env*` files, so a `cat .env.local` is refused even if the agent ignores the skill. Or add
+this to a project's `AGENTS.md`:
 
 ```markdown
-When given a link on stubs.talix.app, run `npx -y @talix/stubs@0.3.0 pull <link>` (or the
+When given a link on stubs.talix.app, run `npx -y --loglevel=warn -- @talix/stubs@0.4.0 pull <link>` (or the
 `pull_stub` tool). It writes the values into `.env.local` and prints only the key names.
-Never `cat`, read, or print `.env*` files.
+Run anything that needs those values as `npx -y --loglevel=warn -- @talix/stubs@0.4.0 run -- <command>`, which
+masks them in the output. Never `cat`, read, or print `.env*` files unless the user asks.
 ```
 
 Commands, exit codes, and MCP setup are in [cli/README.md](cli/README.md).
+
+### What this protects and what it doesn't
+
+This keeps values out of logs and transcripts by accident. The CLI never prints a value on any
+path, prints a link only when `push` makes one, and `run` masks the file's values in whatever the command prints, in the
+plain, JSON-escaped, URL-encoded, and base64 forms. With `--protect`, Claude Code's file tools
+refuse to open the file.
+
+It doesn't stop an agent that sets out to read the values. An agent running arbitrary code as
+you can read any file you can: a `node -e` script isn't covered by the permission rule, a
+value printed in hex or UTF-16 gets past the masker, and a command can write to the terminal
+device by name. Values shorter than 6 characters aren't masked at all. Keeping values out of
+an agent's reach altogether is separate, planned work (TAL-142); this version doesn't claim
+it. The full list is in [cli/README.md](cli/README.md#what-this-protects-and-what-it-doesnt).
 
 ## Known limits
 

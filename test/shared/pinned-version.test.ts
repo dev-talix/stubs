@@ -1,5 +1,8 @@
 /// <reference types="node" />
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { STUBS_CLI_VERSION } from "../../src/shared/stubs-cli";
 
@@ -11,6 +14,7 @@ const MARKDOWN = ["README.md", "cli/README.md", "cli/CHANGELOG.md", "docs/agent-
 
 // Site files that vite.config.ts stamps at build time from the same package.json.
 const TEMPLATES = ["index.html", "security.html", "src/llms.txt"];
+const COMMAND_PREFIX = /(npx -y (?:--loglevel=warn -- )?|npm i -g |"-y", ")$/;
 
 describe("pinned CLI version", () => {
   it("comes from cli/package.json", () => {
@@ -25,10 +29,40 @@ describe("pinned CLI version", () => {
     const unpinned = runs.filter((m) => {
       const before = text.slice(Math.max(0, m.index! - 25), m.index!);
       // Mentions of the package by name (headings, prose, npm URLs) aren't run commands.
-      const isCommand = /(npx -y |npm i -g |"-y", ")$/.test(before);
+      const isCommand = COMMAND_PREFIX.test(before);
       return isCommand && m[1] !== `@${STUBS_CLI_VERSION}` && m[1] !== "@{{VERSION}}";
     });
     expect(unpinned.map((m) => m[0] + text.slice(m.index! + m[0].length, m.index! + m[0].length + 12))).toEqual([]);
+  });
+
+  it.each(["npx -y ", "npx -y --loglevel=warn -- ", "npm i -g ", '"-y", "'])("checks the version after %s", (prefix) => {
+    expect(COMMAND_PREFIX.test(prefix)).toBe(true);
+  });
+
+  it("sync-version bumps the safe npx form and MCP configs, leaving historical versions alone", () => {
+    const root = mkdtempSync(join(tmpdir(), "stubs-version-"));
+    try {
+      for (const dir of ["scripts", "cli", "docs"]) mkdirSync(join(root, dir));
+      copyFileSync(new URL("../../scripts/sync-version.mjs", import.meta.url), join(root, "scripts/sync-version.mjs"));
+      writeFileSync(join(root, "cli/package.json"), JSON.stringify({ version: "9.8.7-beta.1" }));
+      writeFileSync(
+        join(root, "cli/server.json"),
+        JSON.stringify({ version: "0.1.0", packages: [{ registryType: "npm", version: "0.1.0" }] }),
+      );
+      const before = 'npx -y --loglevel=warn -- @talix/stubs@0.1.0 run -- pnpm test\n["-y", "@talix/stubs@0.2.0", "mcp"]\n';
+      const after = 'npx -y --loglevel=warn -- @talix/stubs@9.8.7-beta.1 run -- pnpm test\n["-y", "@talix/stubs@9.8.7-beta.1", "mcp"]\n';
+      for (const path of ["README.md", "cli/README.md", "docs/agent-tooling.md", "cli/CHANGELOG.md"]) {
+        writeFileSync(join(root, path), before);
+      }
+      execFileSync(process.execPath, ["--", join(root, "scripts/sync-version.mjs")], { timeout: 5000 });
+      for (const path of ["README.md", "cli/README.md", "docs/agent-tooling.md"]) {
+        expect(readFileSync(join(root, path), "utf8")).toBe(after);
+      }
+      expect(readFileSync(join(root, "cli/CHANGELOG.md"), "utf8")).toBe(before);
+      expect(execFileSync(process.execPath, ["--", join(root, "scripts/sync-version.mjs")], { timeout: 5000, encoding: "utf8" })).toBe("");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it.each(TEMPLATES)("%s carries only the placeholder, never a literal version", (path) => {
