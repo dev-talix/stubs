@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0
 
 - `stubs push --prompt` reads hidden multiline `.env` input from your terminal without a
   plaintext file. Ctrl-D finishes; Ctrl-C cancels without creating a stub. It accepts up to

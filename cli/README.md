@@ -15,19 +15,19 @@ them; see [What this protects and what it doesn't](#what-this-protects-and-what-
 Codex; from then on, any stubs link you hand the agent gets pulled the safe way:
 
 ```bash
-npx -y --loglevel=warn -- @talix/stubs@0.4.0 skill install
+npx -y --loglevel=warn -- @talix/stubs@0.5.0 skill install
 ```
 
 Run it without installing:
 
 ```bash
-npx -y --loglevel=warn -- @talix/stubs@0.4.0 pull 'https://stubs.talix.app/t#v1.…'
+npx -y --loglevel=warn -- @talix/stubs@0.5.0 pull 'https://stubs.talix.app/t#v1.…'
 ```
 
 Or install it globally and use the `stubs` bin:
 
 ```bash
-npm i -g @talix/stubs@0.4.0
+npm i -g @talix/stubs@0.5.0
 stubs pull 'https://stubs.talix.app/t#v1.…'
 ```
 
@@ -35,9 +35,6 @@ Needs Node 20 or later. On macOS and Linux, direct execution also needs `/usr/bi
 `-S` support, such as GNU coreutils 8.30 or later. Windows npm launchers use Node directly.
 For an older or minimal Unix `env`, run `node -- node_modules/@talix/stubs/dist/stubs.js`
 followed by the command. Keep the `--` before the script path.
-
-The Windows launcher fix is unreleased. Published 0.4.0 still requires `sh` on PATH.
-After a local installation, the same `node --` command above works without `sh`.
 
 ## Commands
 
@@ -127,14 +124,13 @@ link, a global npm install, and `pnpm dlx`: Node's scan stops before your argume
 four spellings of `--env-file` and `--env-file-if-exists` are refused with a message naming
 `--from`.
 
-For npx, always use `npx -y --loglevel=warn -- @talix/stubs@0.4.0 run -- <command>`. The first
+For npx, always use `npx -y --loglevel=warn -- @talix/stubs@0.5.0 run -- <command>`. The first
 `--` stops Node's scan in npx itself. `--loglevel=warn` stops npm 12 printing `npm notice run`
 with your whole command line before stubs starts, while still showing npm's real warnings and
 errors. Plain npx without that early `--` is unprotected: it can load the
 file and run its hooks before our launcher starts. Raw `node dist/stubs.js` is also
-unprotected because it skips the shebang. From the next release, Windows npm shims invoke
-`node --` directly without `sh`; see the unreleased launcher note under [Install](#install).
-Stubs reads the env file itself through `--from`.
+unprotected because it skips the shebang. Windows npm shims invoke `node --` directly, so
+`sh` is not required. Stubs reads the env file itself through `--from`.
 
 How it works:
 
@@ -166,9 +162,6 @@ How it works:
   them deliberately, remove them from the env file and set them in your shell before running
   `stubs run`. The list covers these known keys; other hooks and application-specific
   configuration remain possible. It does not sandbox the command or prevent network access.
-  Published 0.4.0 doesn't yet refuse the TAL-144 additions: `CC`, `CXX`, `ERL_AFLAGS`,
-  `ERL_FLAGS`, `ERL_ZFLAGS`, `LUA_INIT`, the `LUA_INIT_` prefix, `HTTP_PROXY`, `HTTPS_PROXY`,
-  `ALL_PROXY`, and `DOCKER_HOST`, including lowercase proxy names. They ship in the next release.
 - Masking works on bytes, so binary output passes through, and a value split across two
   writes is still caught: a chunk that ends with the start of a value is held until the rest
   arrives or the command exits, however long that takes. There is no timer that lets it out
@@ -370,7 +363,7 @@ see [permissions](https://developers.openai.com/codex/permissions) for a profile
 This rule blocks Claude Code's file tools even when you ask it to read a value. That's the
 point of a host setting. Open the file yourself, or remove the rule for that session.
 
-The skill pins the CLI version (`@talix/stubs@0.4.0`), so an agent only ever runs a version you
+The skill pins the CLI version (`@talix/stubs@0.5.0`), so an agent only ever runs a version you
 installed on purpose. To move to a newer release, run `skill install` from that release.
 
 ## Exit codes
@@ -415,9 +408,9 @@ reserved as described [above](#stubs-run----cmd-args).
 
 One limit of `npx` itself: it prefers a package already installed in the project when one
 matches the requested name and version. A project whose dependencies you don't trust could
-carry a fake `@talix/stubs` under `node_modules`, and `npx -y --loglevel=warn -- @talix/stubs@0.4.0` would run it.
+carry a fake `@talix/stubs` under `node_modules`, and `npx -y --loglevel=warn -- @talix/stubs@0.5.0` would run it.
 That attacker already runs code in your project, so the extra reach is small, but for untrusted
-checkouts install the CLI globally (`npm i -g @talix/stubs@0.4.0`) and run `stubs` from your PATH,
+checkouts install the CLI globally (`npm i -g @talix/stubs@0.5.0`) and run `stubs` from your PATH,
 which doesn't look in the project.
 
 ## MCP setup
@@ -425,7 +418,7 @@ which doesn't look in the project.
 Claude Code:
 
 ```bash
-claude mcp add stubs -- npx -y @talix/stubs@0.4.0 mcp
+claude mcp add stubs -- npx -y @talix/stubs@0.5.0 mcp
 ```
 
 Cursor, in `.cursor/mcp.json`:
@@ -435,7 +428,7 @@ Cursor, in `.cursor/mcp.json`:
   "mcpServers": {
     "stubs": {
       "command": "npx",
-      "args": ["-y", "@talix/stubs@0.4.0", "mcp"]
+      "args": ["-y", "@talix/stubs@0.5.0", "mcp"]
     }
   }
 }
@@ -446,7 +439,7 @@ Codex, in `~/.codex/config.toml`:
 ```toml
 [mcp_servers.stubs]
 command = "npx"
-args = ["-y", "@talix/stubs@0.4.0", "mcp"]
+args = ["-y", "@talix/stubs@0.5.0", "mcp"]
 ```
 
 ## For your AGENTS.md (if you don't use the skill)
@@ -454,9 +447,9 @@ args = ["-y", "@talix/stubs@0.4.0", "mcp"]
 Add this to a project's `AGENTS.md` (or `CLAUDE.md`) so agents know what to do with a link:
 
 ```markdown
-When given a link on stubs.talix.app, run `npx -y --loglevel=warn -- @talix/stubs@0.4.0 pull <link>` (or the
+When given a link on stubs.talix.app, run `npx -y --loglevel=warn -- @talix/stubs@0.5.0 pull <link>` (or the
 `pull_stub` tool). It writes the values into `.env.local` and prints only the key names.
-Run anything that needs those values as `npx -y --loglevel=warn -- @talix/stubs@0.4.0 run -- <command>`, which
+Run anything that needs those values as `npx -y --loglevel=warn -- @talix/stubs@0.5.0 run -- <command>`, which
 masks them in the output. Never `cat`, read, or print `.env*` files unless the user asks.
 ```
 
