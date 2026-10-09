@@ -132,8 +132,9 @@ For npx, always use `npx -y --loglevel=warn -- @talix/stubs@0.4.0 run -- <comman
 with your whole command line before stubs starts, while still showing npm's real warnings and
 errors. Plain npx without that early `--` is unprotected: it can load the
 file and run its hooks before our launcher starts. Raw `node dist/stubs.js` is also
-unprotected because it skips the shebang. Windows npm shims invoke `node --` directly;
-`sh` is not required. Stubs reads the env file itself through `--from`.
+unprotected because it skips the shebang. From the next release, Windows npm shims invoke
+`node --` directly without `sh`; see the unreleased launcher note under [Install](#install).
+Stubs reads the env file itself through `--from`.
 
 How it works:
 
@@ -380,9 +381,12 @@ installed on purpose. To move to a newer release, run `skill install` from that 
 | 5 | Refused: git would track the file | `refused` |
 | 6 | Tampered: opened but wouldn't decrypt. It's void now. | `tampered` |
 | 7 | Uncertain: the connection dropped mid-open. Run it again: if it did open, it reports void. | `uncertain` |
+| 130 | Cancelled hidden input during `push --prompt`, including Ctrl-C | `invalid` |
 | 1 | Anything else | `error` |
 
 With `--json`, a failure prints `{"ok":false,"code":"void","message":"…"}`.
+Cancelling `push --prompt` reports `code: "invalid"` and `exitCode: 130` in JSON.
+That optional `exitCode` field overrides the usual exit code for the failure.
 
 `stubs run` is the exception: its exit code is the command's own, with `125`, `126`, and `127`
 reserved as described [above](#stubs-run----cmd-args).

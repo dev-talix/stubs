@@ -14,13 +14,14 @@ keeping the values out of its reach altogether is TAL-142.
 ## Package
 
 - npm name `@talix/stubs`, bin `stubs`. Lives in `cli/` as a pnpm workspace package.
-- Node `>=20`. Runtime dependencies: `@modelcontextprotocol/sdk` and `zod` only. Argument
-  parsing uses `node:util` `parseArgs`.
+- Node `>=20`. No runtime dependencies. `@modelcontextprotocol/sdk` and `zod` are build-time
+  dev dependencies bundled into the CLI. Argument parsing uses `node:util` `parseArgs`.
 - Built with esbuild into `cli/dist/stubs.js` (ESM, `--platform=node`, relative imports
-  bundled, packages external). The bundle pulls `src/core/*` and `src/shared/protocol.ts` from
-  the repo root; those files are the same code the browser runs.
-- `files` in `package.json` lists only `dist/` and `README.md`. `npm pack --dry-run` must show
-  nothing else, and nothing under `dist/` may contain a `.env` value, a key, or a link.
+  and npm package imports bundled, Node built-ins external). The bundle pulls `src/core/*`
+  and `src/shared/protocol.ts` from the repo root; those files are the same code the browser runs.
+- `files` in `package.json` lists `dist`, `README.md`, `CHANGELOG.md`, and `LICENSE`.
+  `npm pack --dry-run` must show only those files and the automatically included `package.json`.
+  Nothing under `dist/` may contain a `.env` value, a key, or a link.
 
 ## Commands
 
@@ -284,7 +285,12 @@ pnpm --config.verifyDepsBeforeRun=false build
 | 5 | refused: the target file isn't ignored by git (see R1.5) | `refused` |
 | 6 | tampered: opened but wouldn't decrypt (now void) | `tampered` |
 | 7 | uncertain: connection dropped mid-open; retry tells which | `uncertain` |
+| 130 | cancelled hidden input during `push --prompt`, including Ctrl-C | `invalid` |
 | 1 | anything else | `error` |
+
+Failures may include an optional JSON `exitCode` field. The CLI uses it as the process exit
+status instead of the default for `code`. Cancelled hidden input reports `code: "invalid"`
+and `exitCode: 130`.
 
 ### R6 Never leak
 
@@ -322,8 +328,10 @@ environment on error, so the pulled values would land in the transcript anyway (
    `npm notice run` line, which echoes the whole command line. Plain npx without that `--` is unprotected:
    the Node process running npx can load the file and execute its hooks before our launcher
    starts. Raw `node dist/stubs.js` is also unprotected because it skips the launcher.
-   Windows shims from npm's `cmd-shim` read the shebang and run `node -- stubs.js`; no `sh`
-   is needed. Direct Unix execution requires `/usr/bin/env -S`, provided by GNU coreutils
+   With the unreleased launcher, Windows shims from npm's `cmd-shim` read the shebang and run
+   `node -- stubs.js` without `sh`. Published 0.4.0 still needs `sh` on PATH on Windows;
+   until the next release, run `node -- <installed dist/stubs.js path>` instead.
+   Direct Unix execution requires `/usr/bin/env -S`, provided by GNU coreutils
    8.30 and later. For an older or minimal `env`, use `node -- dist/stubs.js` with the
    installed script path. The `--` before that path stops Node's scan. A missing file is an
    error, not an empty run: the agent should pull first. A key the environment already sets
