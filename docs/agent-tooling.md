@@ -336,17 +336,13 @@ environment on error, so the pulled values would land in the transcript anyway (
    installed script path. The `--` before that path stops Node's scan. A missing file is an
    error, not an empty run: the agent should pull first. A key the environment already sets
    to a different value stops the run (exit `125`, keys named): two sources of truth. The same
-   value is fine. Keys matched by the refusal list in `cli/src/run.ts` (prefixes `LD_`,
-   `DYLD_`, `NODE_` except `NODE_ENV`, `NPM_CONFIG_`, `YARN_`, `PNPM_`, `BUN_`, `PYTHON`,
-   `PERL`, `RUBY`, `GEM_`, `BUNDLE_`, `GIT_`, `JAVA_`, `_JAVA_`, `JDK_JAVA_`, `DOTNET_`,
-   `XDG_`, `LUA_INIT_`; names `PATH`, `HOME`, `SHELL`, `ENV`, `BASH_ENV`, `ZDOTDIR`, `SHELLOPTS`,
-   `BASHOPTS`, `IFS`, `PS4`, `PROMPT_COMMAND`, `CDPATH`, `CLASSPATH`, `PAGER`, `MANPAGER`,
-   `EDITOR`, `VISUAL`, `BROWSER`, `LESSOPEN`, `LESSCLOSE`, `CC`, `CXX`, `ERL_AFLAGS`,
-   `ERL_FLAGS`, `ERL_ZFLAGS`, `LUA_INIT`, `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`,
-   `DOCKER_HOST`; case-insensitive, including lowercase proxy names) stop the run the same
-   way. `LUA_INIT_` covers versioned startup hooks such as `LUA_INIT_5_4`. These known keys can
-   select code or redirect supported tools' traffic. The diagnostic names only keys and says
-   they can change which code programs run or where they send traffic. Deliberate shell
+   value is fine. Keys on the [refused-key list in the CLI README](../cli/README.md#stubs-run----cmd-args)
+   stop the run the same way, as checked by `isRefusedKey` in [`cli/src/run.ts`](../cli/src/run.ts).
+   Matching is case-insensitive, including lowercase proxy names, and only file-supplied keys
+   are checked. Published 0.4.0 doesn't yet refuse the TAL-144 additions listed in the README;
+   they ship in the next release. These known keys can select code or redirect supported
+   tools' traffic. The diagnostic names only keys and says they can change which code programs
+   run or where they send traffic. Deliberate shell
    configuration remains available: remove the key from the env file and set it in the shell
    before `stubs run`. This is a blocklist for these known keys. Other hooks and
    application-specific configuration remain possible; it does not sandbox the command or

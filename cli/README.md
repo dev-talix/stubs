@@ -166,6 +166,9 @@ How it works:
   them deliberately, remove them from the env file and set them in your shell before running
   `stubs run`. The list covers these known keys; other hooks and application-specific
   configuration remain possible. It does not sandbox the command or prevent network access.
+  Published 0.4.0 doesn't yet refuse the TAL-144 additions: `CC`, `CXX`, `ERL_AFLAGS`,
+  `ERL_FLAGS`, `ERL_ZFLAGS`, `LUA_INIT`, the `LUA_INIT_` prefix, `HTTP_PROXY`, `HTTPS_PROXY`,
+  `ALL_PROXY`, and `DOCKER_HOST`, including lowercase proxy names. They ship in the next release.
 - Masking works on bytes, so binary output passes through, and a value split across two
   writes is still caught: a chunk that ends with the start of a value is held until the rest
   arrives or the command exits, however long that takes. There is no timer that lets it out
