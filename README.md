@@ -33,7 +33,7 @@ See the [CLI commands](cli/README.md#commands) to set this up.
 Install the skill for Claude Code or Codex:
 
 ```bash
-npx -y --loglevel=warn -- @talix/stubs@0.5.0 skill install
+npx -y --loglevel=warn -- @talix/stubs@0.5.1 skill install
 ```
 
 The skill tells the agent how to pull a link, run commands with its values, and share

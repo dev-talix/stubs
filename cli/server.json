@@ -3,14 +3,14 @@
   "name": "app.talix/stubs",
   "title": "Stubs",
   "description": "Pull one-time .env links from stubs.talix.app into a project. Returns key names, never values.",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "websiteUrl": "https://stubs.talix.app",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@talix/stubs",
-      "version": "0.5.0",
+      "version": "0.5.1",
       "transport": {
         "type": "stdio"
       },

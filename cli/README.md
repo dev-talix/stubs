@@ -18,19 +18,19 @@ and logs. It doesn't stop an agent that sets out to read your files. The CLI is 
 Needs Node 20 or later. Install the agent skill for Claude Code and Codex:
 
 ```bash
-npx -y --loglevel=warn -- @talix/stubs@0.5.0 skill install
+npx -y --loglevel=warn -- @talix/stubs@0.5.1 skill install
 ```
 
 Run the CLI with npx:
 
 ```bash
-npx -y --loglevel=warn -- @talix/stubs@0.5.0 pull 'https://stubs.talix.app/t#v1.…'
+npx -y --loglevel=warn -- @talix/stubs@0.5.1 pull 'https://stubs.talix.app/t#v1.…'
 ```
 
 Or install it globally and use `stubs`:
 
 ```bash
-npm i -g @talix/stubs@0.5.0
+npm i -g @talix/stubs@0.5.1
 stubs pull 'https://stubs.talix.app/t#v1.…'
 ```
 
@@ -174,7 +174,7 @@ Read the [full protection limits](https://github.com/dev-talix/stubs/blob/main/d
 Claude Code:
 
 ```bash
-claude mcp add stubs -- npx -y @talix/stubs@0.5.0 mcp
+claude mcp add stubs -- npx -y @talix/stubs@0.5.1 mcp
 ```
 
 Cursor, in `.cursor/mcp.json`:
@@ -184,7 +184,7 @@ Cursor, in `.cursor/mcp.json`:
   "mcpServers": {
     "stubs": {
       "command": "npx",
-      "args": ["-y", "@talix/stubs@0.5.0", "mcp"]
+      "args": ["-y", "@talix/stubs@0.5.1", "mcp"]
     }
   }
 }
@@ -195,7 +195,7 @@ Codex, in `~/.codex/config.toml`:
 ```toml
 [mcp_servers.stubs]
 command = "npx"
-args = ["-y", "@talix/stubs@0.5.0", "mcp"]
+args = ["-y", "@talix/stubs@0.5.1", "mcp"]
 ```
 
 ## Without the skill
@@ -203,8 +203,8 @@ args = ["-y", "@talix/stubs@0.5.0", "mcp"]
 Add this to a project's `AGENTS.md` (or `CLAUDE.md`) so agents know what to do with a link:
 
 ```markdown
-When given a link on stubs.talix.app, run `npx -y --loglevel=warn -- @talix/stubs@0.5.0 pull <link>` (or the
+When given a link on stubs.talix.app, run `npx -y --loglevel=warn -- @talix/stubs@0.5.1 pull <link>` (or the
 `pull_stub` tool). It writes the values into `.env.local` and prints only the key names.
-Run anything that needs those values as `npx -y --loglevel=warn -- @talix/stubs@0.5.0 run -- <command>`, which
+Run anything that needs those values as `npx -y --loglevel=warn -- @talix/stubs@0.5.1 run -- <command>`, which
 masks them in the output. Never `cat`, read, or print `.env*` files unless the user asks.
 ```

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1
+
+- The npm README is shorter and opens with a banner. Command internals, masking details,
+  startup guards, and the full refused-key list moved to `docs/cli-reference.md` on GitHub.
+  No CLI behavior changes.
+
 ## 0.5.0
 
 - `stubs push --prompt` reads hidden multiline `.env` input from your terminal without a
