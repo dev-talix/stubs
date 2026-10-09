@@ -31,7 +31,13 @@ npm i -g @talix/stubs@0.4.0
 stubs pull 'https://stubs.talix.app/t#v1.…'
 ```
 
-Needs Node 20 or later.
+Needs Node 20 or later. On macOS and Linux, direct execution also needs `/usr/bin/env` with
+`-S` support, such as GNU coreutils 8.30 or later. Windows npm launchers use Node directly.
+For an older or minimal Unix `env`, run `node -- node_modules/@talix/stubs/dist/stubs.js`
+followed by the command. Keep the `--` before the script path.
+
+The Windows launcher fix is unreleased. Published 0.4.0 still requires `sh` on PATH.
+After a local installation, the same `node --` command above works without `sh`.
 
 ## Commands
 
@@ -115,8 +121,8 @@ There is no flag that shows the values. If you want to see them, open the file y
 
 The flag is `--from`, not `--env-file`, for a reason: Node reads `--env-file` itself, anywhere
 on the command line before a `--`, and loads that file before stubs can refuse it. A file
-carrying `NODE_OPTIONS` can then run its own code. The `stubs` executable is a shell launcher
-that execs `node -- stubs.js`. That protects the direct executable, the `node_modules/.bin`
+carrying `NODE_OPTIONS` can then run its own code. The `stubs` executable's shebang starts
+`node -- stubs.js`. That protects the direct executable, the `node_modules/.bin`
 link, a global npm install, and `pnpm dlx`: Node's scan stops before your arguments, so all
 four spellings of `--env-file` and `--env-file-if-exists` are refused with a message naming
 `--from`.
@@ -126,10 +132,9 @@ For npx, always use `npx -y --loglevel=warn -- @talix/stubs@0.4.0 run -- <comman
 with your whole command line before stubs starts, while still showing npm's real warnings and
 errors. Plain npx without that early `--` is unprotected: it can load the
 file and run its hooks before our launcher starts. Raw `node dist/stubs.js` is also
-unprotected because it skips the shell launcher. On Windows, npm's shim needs `sh` on
-`PATH`, as in Git Bash or WSL. From `cmd.exe` or PowerShell without `sh`, use
-`node -- node_modules/@talix/stubs/dist/stubs.js run -- <command>`. Keep the `--` before the
-script path. Stubs reads the env file itself through `--from`.
+unprotected because it skips the shebang. From the next release, Windows npm shims invoke
+`node --` directly without `sh`; see the unreleased launcher note under [Install](#install).
+Stubs reads the env file itself through `--from`.
 
 How it works:
 

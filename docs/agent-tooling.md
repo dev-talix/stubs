@@ -320,16 +320,19 @@ environment on error, so the pulled values would land in the transcript anyway (
    Node 22 scans the whole command line for that flag until `--` and loads the file before
    any CLI code runs, `NODE_OPTIONS` included. Two layers: `--env-file`
    and `--env-file-if-exists` (space or `=`) are refused with a message naming `--from`, and
-   the shipped `dist/stubs.js` starts with a sh/JS polyglot launcher (`cli/build.mjs`) that
-   execs `node -- stubs.js "$@"`, so Node's scan stops before our arguments on every launch
+   the built `dist/stubs.js` starts with `#!/usr/bin/env -S node --` (`cli/build.mjs`), so
+   Node's scan stops before our arguments on every launch
    that goes through the executable: the direct executable, the npm bin link, a global npm
    install, and `pnpm dlx`. Npx needs its own early separator:
    `npx -y --loglevel=warn -- @talix/stubs@0.4.0 run -- <cmd>`. `--loglevel=warn` stops npm 12's
    `npm notice run` line, which echoes the whole command line. Plain npx without that `--` is unprotected:
    the Node process running npx can load the file and execute its hooks before our launcher
    starts. Raw `node dist/stubs.js` is also unprotected because it skips the launcher.
-   Windows shims from npm's `cmd-shim` read the shebang and run `sh stubs.js`, which needs
-   `sh` on `PATH`, as in Git Bash or WSL. Without `sh`, use `node -- dist/stubs.js` with the
+   With the unreleased launcher, Windows shims from npm's `cmd-shim` read the shebang and run
+   `node -- stubs.js` without `sh`. Published 0.4.0 still needs `sh` on PATH on Windows;
+   until the next release, run `node -- <installed dist/stubs.js path>` instead.
+   Direct Unix execution requires `/usr/bin/env -S`, provided by GNU coreutils
+   8.30 and later. For an older or minimal `env`, use `node -- dist/stubs.js` with the
    installed script path. The `--` before that path stops Node's scan. A missing file is an
    error, not an empty run: the agent should pull first. A key the environment already sets
    to a different value stops the run (exit `125`, keys named): two sources of truth. The same
@@ -413,6 +416,17 @@ environment on error, so the pulled values would land in the transcript anyway (
    kept), a short command returning in under a second, a relay error against a command that
    handles it and ignores `SIGTERM`, and a `GIT_CONFIG_*` stub against real `git`. Every spawned process is killed in teardown
    (`cli/test/helpers/leftovers.ts`), so a failing test can't leave one behind.
+
+   TAL-145 covers npm launcher compatibility in `cli/test/launcher.test.ts`. It packs the
+   local build, installs into a private project with spaces in its path, and checks the
+   generated Windows shims, version, `init`/`id --json`, and all four startup-flag spellings
+   with require/import hooks and a missing file through the installed bin and offline npx.
+   On Unix it also exercises the direct executable's `env -S` shebang.
+   `.github/workflows/cli-launcher.yml` runs this on Linux, macOS, and Windows. Windows
+   child processes get only Node and Windows utility directories on PATH, and `where sh`
+   must fail. That job also executes the PowerShell shim and reproduces the published
+   0.4.0 failure. A local POSIX pass verifies shim generation and POSIX execution only;
+   native Windows acceptance requires the Windows CI job to pass.
 
 ### R13 `stubs skill install --protect`
 

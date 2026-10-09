@@ -1,14 +1,11 @@
-// Bundles the CLI into dist/stubs.js. The file starts as a shell script that execs node with
-// `--` before the script path, and only then as JavaScript. Node reads `--env-file` anywhere
-// on its command line until it sees `--`, including after the script, and loads that file
-// (NODE_OPTIONS included) before any of our code runs. The `--` stops that. The second line
-// is a no-op in sh (`:`) and a string expression in JavaScript, so node runs the same file.
-// Windows shims from npm run it as `sh stubs.js`, which needs sh on PATH (Git Bash does).
+// Node scans for --env-file before our code runs, including arguments after the script.
+// Keep -- before the script path. Unix env -S splits the shebang arguments; npm's Windows
+// shims read them directly and invoke node -- without requiring a shell interpreter.
 
 import { chmod } from "node:fs/promises";
 import { build } from "esbuild";
 
-const launcher = ['#!/usr/bin/env sh', '":" //; exec node -- "$0" "$@"'].join("\n");
+const launcher = "#!/usr/bin/env -S node --";
 
 await build({
   entryPoints: ["src/main.ts"],
