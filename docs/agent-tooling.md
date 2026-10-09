@@ -334,7 +334,7 @@ environment on error, so the pulled values would land in the transcript anyway (
    installed script path. The `--` before that path stops Node's scan. A missing file is an
    error, not an empty run: the agent should pull first. A key the environment already sets
    to a different value stops the run (exit `125`, keys named): two sources of truth. The same
-   value is fine. Keys on the [refused-key list in the CLI README](../cli/README.md#stubs-run----cmd-args)
+   value is fine. Keys on the [refused-key list in the CLI reference](cli-reference.md#refused-keys)
    stop the run the same way, as checked by `isRefusedKey` in [`cli/src/run.ts`](../cli/src/run.ts).
    Matching is case-insensitive, including lowercase proxy names, and only file-supplied keys
    are checked. These known keys can select code or redirect supported
