@@ -132,8 +132,9 @@ For npx, always use `npx -y --loglevel=warn -- @talix/stubs@0.4.0 run -- <comman
 with your whole command line before stubs starts, while still showing npm's real warnings and
 errors. Plain npx without that early `--` is unprotected: it can load the
 file and run its hooks before our launcher starts. Raw `node dist/stubs.js` is also
-unprotected because it skips the shebang. Windows npm shims invoke `node --` directly;
-`sh` is not required. Stubs reads the env file itself through `--from`.
+unprotected because it skips the shebang. From the next release, Windows npm shims invoke
+`node --` directly without `sh`; see the unreleased launcher note under [Install](#install).
+Stubs reads the env file itself through `--from`.
 
 How it works:
 

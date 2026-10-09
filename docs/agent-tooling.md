@@ -328,8 +328,10 @@ environment on error, so the pulled values would land in the transcript anyway (
    `npm notice run` line, which echoes the whole command line. Plain npx without that `--` is unprotected:
    the Node process running npx can load the file and execute its hooks before our launcher
    starts. Raw `node dist/stubs.js` is also unprotected because it skips the launcher.
-   Windows shims from npm's `cmd-shim` read the shebang and run `node -- stubs.js`; no `sh`
-   is needed. Direct Unix execution requires `/usr/bin/env -S`, provided by GNU coreutils
+   With the unreleased launcher, Windows shims from npm's `cmd-shim` read the shebang and run
+   `node -- stubs.js` without `sh`. Published 0.4.0 still needs `sh` on PATH on Windows;
+   until the next release, run `node -- <installed dist/stubs.js path>` instead.
+   Direct Unix execution requires `/usr/bin/env -S`, provided by GNU coreutils
    8.30 and later. For an older or minimal `env`, use `node -- dist/stubs.js` with the
    installed script path. The `--` before that path stops Node's scan. A missing file is an
    error, not an empty run: the agent should pull first. A key the environment already sets
