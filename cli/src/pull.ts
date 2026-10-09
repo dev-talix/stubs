@@ -3,7 +3,7 @@
 // so nothing after the claim refuses. Existing keys are skipped rather than treated as errors.
 
 import { access, constants, lstat, readFile, realpath, stat } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { revealTicket, type RevealOutcome, type Transport } from "../../src/core/ticket";
 import { isNotFound, mergeEnv, writeFileAtomic, writeRecoveryFile } from "./env-file";
 import { decideGuard, guardMessage, probeGit, type GitFacts } from "./git-guard";
@@ -167,11 +167,15 @@ function projectPermissionFailure(error: unknown, project?: string): Failure | n
   return fail("invalid", `The env file or its folder can't be accessed. ${NOTHING_CONSUMED}`);
 }
 
-/** Check both resolved-file and resolved-parent targets before permission preflight. */
-function checkProjectBoundary(target: string, project?: string): Failure | null {
+/**
+ * Check both resolved-file and resolved-parent targets before permission preflight. Both paths
+ * are realpaths, so compare them with exact case; path.relative ignores case on Windows.
+ * Exported for tests with either platform's separator.
+ */
+export function checkProjectBoundary(target: string, project?: string, separator: string = sep): Failure | null {
   if (project === undefined) return null;
-  const rel = relative(project, target);
-  if (rel === "" || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
+  const prefix = project.endsWith(separator) ? project : `${project}${separator}`;
+  if (target === project || !target.startsWith(prefix)) {
     return fail("invalid", `The env file must stay inside the project directory, including symlink targets. ${NOTHING_CONSUMED}`);
   }
   return null;

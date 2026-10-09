@@ -3,7 +3,7 @@ import { readdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, onTestFinished } from "vitest";
 import { parseTicketFragment, revealTicket } from "../../src/core/ticket";
 import { fakeServer, type FakeServer } from "./helpers/fake-server";
 import { useTempDirs } from "./helpers/temp";
@@ -32,12 +32,21 @@ type TerminalResult = { code: number; output: string; hidden: boolean; restored:
 async function terminal(chunks: Buffer[], signal?: string): Promise<TerminalResult> {
   return new Promise((done, failed) => {
     const child = spawn("python3", [DRIVER], { cwd });
+    const timeout = setTimeout(() => {
+      child.kill();
+      failed(new Error("PTY driver timed out"));
+    }, 12_000);
+    onTestFinished(() => { if (!child.killed) child.kill(); });
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (chunk) => { stdout += chunk.toString(); });
     child.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
-    child.on("error", failed);
+    child.on("error", (error) => {
+      clearTimeout(timeout);
+      failed(error);
+    });
     child.on("close", (code) => {
+      clearTimeout(timeout);
       if (code !== 0) return failed(new Error(`PTY driver failed: ${stderr}`));
       try { done(JSON.parse(stdout) as TerminalResult); } catch (error) { failed(error); }
     });

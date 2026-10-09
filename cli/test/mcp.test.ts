@@ -1,11 +1,12 @@
 import { chmod, lstat, mkdir, readFile, readdir, readlink, rm, symlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, posix, win32 } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { generateIdentity } from "../../src/core/lock";
 import { createIdentity } from "../src/identity";
 import { createMcpServer } from "../src/mcp";
+import { checkProjectBoundary } from "../src/pull";
 import { readPackageVersion } from "../src/version";
 import { fakeServer, type FakeServer } from "./helpers/fake-server";
 import { ORIGIN } from "./helpers/run";
@@ -40,6 +41,24 @@ async function call(name: string, args: Record<string, unknown>) {
 }
 
 describe("mcp server", () => {
+  it.each([
+    ["posix", posix, "/"],
+    ["win32", win32, "C:\\"],
+  ] as const)("checks canonical project boundaries with exact case on %s", (_name, path, root) => {
+    const project = path.join(root, "x", "project");
+    const rejected = {
+      ok: false,
+      code: "invalid",
+      message: "The env file must stay inside the project directory, including symlink targets. Nothing was consumed.",
+    };
+    expect(checkProjectBoundary(path.join(root, "x", "PROJECT", "private.env"), project, path.sep)).toEqual(rejected);
+    expect(checkProjectBoundary(path.join(root, "x", "project-other", "private.env"), project, path.sep)).toEqual(rejected);
+    expect(checkProjectBoundary(project, project, path.sep)).toEqual(rejected);
+    expect(checkProjectBoundary(root, root, path.sep)).toEqual(rejected);
+    expect(checkProjectBoundary(path.join(project, ".env"), project, path.sep)).toBeNull();
+    expect(checkProjectBoundary(path.join(root, ".env"), root, path.sep)).toBeNull();
+  });
+
   it("lists only pull_stub and check_stub", async () => {
     const { tools } = await client.listTools();
     expect(tools.map((tool) => tool.name).sort()).toEqual(["check_stub", "pull_stub"]);

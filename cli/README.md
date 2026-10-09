@@ -377,9 +377,12 @@ installed on purpose. To move to a newer release, run `skill install` from that 
 | 5 | Refused: git would track the file | `refused` |
 | 6 | Tampered: opened but wouldn't decrypt. It's void now. | `tampered` |
 | 7 | Uncertain: the connection dropped mid-open. Run it again: if it did open, it reports void. | `uncertain` |
+| 130 | Cancelled hidden input during `push --prompt`, including Ctrl-C | `invalid` |
 | 1 | Anything else | `error` |
 
 With `--json`, a failure prints `{"ok":false,"code":"void","message":"…"}`.
+Cancelling `push --prompt` reports `code: "invalid"` and `exitCode: 130` in JSON.
+That optional `exitCode` field overrides the usual exit code for the failure.
 
 `stubs run` is the exception: its exit code is the command's own, with `125`, `126`, and `127`
 reserved as described [above](#stubs-run----cmd-args).

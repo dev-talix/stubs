@@ -10,8 +10,14 @@ import sys
 import termios
 import time
 
+
+def terminated(signum, frame):
+    raise RuntimeError("PTY driver terminated")
+
+
 request = json.load(sys.stdin)
 master, slave = os.openpty()
+os.set_blocking(master, False)
 before = termios.tcgetattr(slave)
 child = subprocess.Popen(request["argv"], stdin=slave, stdout=slave, stderr=slave)
 output = bytearray()
@@ -19,6 +25,7 @@ sent = False
 hidden = False
 deadline = time.monotonic() + 10
 try:
+    signal.signal(signal.SIGTERM, terminated)
     while True:
         if time.monotonic() > deadline:
             raise RuntimeError("CLI did not finish its hidden-input flow")
@@ -34,7 +41,17 @@ try:
                 for chunk in request["chunks"]:
                     data = base64.b64decode(chunk)
                     while data:
-                        data = data[os.write(master, data):]
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0:
+                            raise RuntimeError("CLI did not finish its hidden-input flow")
+                        readable, writable, _ = select.select([master], [master], [], remaining)
+                        if readable:
+                            output.extend(os.read(master, 65536))
+                        if writable:
+                            try:
+                                data = data[os.write(master, data):]
+                            except BlockingIOError:
+                                pass
                     time.sleep(0.02)
         if child.poll() is not None:
             while select.select([master], [], [], 0)[0]:
