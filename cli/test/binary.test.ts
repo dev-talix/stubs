@@ -366,7 +366,7 @@ describe("stubs run through the binary", () => {
     expect(hostile).toEqual({
       code: 125,
       stdout: "",
-      stderr: "stubs: NODE_OPTIONS can't come from an env file: keys like that change which code programs run. Take it out of the file, or set it in your shell on purpose.\n",
+      stderr: "stubs: NODE_OPTIONS can't come from an env file: keys like that can change which code programs run or where they send traffic. Take it out of the file, or set it in your shell on purpose.\n",
     });
     expect(await stat(marker).then(() => true, () => false)).toBe(false);
 

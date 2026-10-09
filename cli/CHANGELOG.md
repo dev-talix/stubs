@@ -21,6 +21,11 @@
   8.30 or later. With an older or minimal `env`, use `node --` before the installed script
   path. Packed-package launcher tests and CI cover Linux, macOS, and Windows.
 
+- `run` refuses env-file compiler selectors, Erlang and Lua startup hooks, proxy keys, and
+  `DOCKER_HOST`, including lowercase names and versioned `LUA_INIT_*` hooks. The error covers
+  code selection and traffic redirection. Deliberate shell configuration remains available;
+  the README lists the blocked keys and the limits of this blocklist.
+
 ## 0.4.0
 
 - `stubs run -- <cmd>` runs a command with the env file's values in its environment and
