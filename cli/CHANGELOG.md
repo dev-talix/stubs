@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.0
 
 - `pull`, `run`, and `push` accept `--env <name>` to use `.env.<name>` in the current directory.
   Names are literal. Invalid names and conflicting file options are refused before any action.
