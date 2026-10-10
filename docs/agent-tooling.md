@@ -38,8 +38,8 @@ network call or input read. `pull --env` with `--to`, `run --env` with `--from`,
 `push --env` with a file, `-`, or `--prompt` are refused. Invalid names and conflicts exit `3`
 (`125` for run) without echoing the name, and nothing is consumed or sent. The selected path
 then goes through the same git guard, symlink handling, refused-key checks, and masking as any
-other file. Run's file errors say "The --env file" rather than printing the path. MCP keeps its
-existing `file` parameter.
+other file. Run's file errors say "The --env file" rather than printing the path. MCP
+`pull_stub` takes the same name as `env`, refused alongside `file`.
 
 ### R1 `stubs pull <link> [--to <file>] [--env <name>] [--overwrite] [--allow-tracked] [--origin <url>] [--json]`
 
@@ -205,11 +205,12 @@ credentials were used.
 Starts an MCP server on stdio (`@modelcontextprotocol/sdk`, `StdioServerTransport`). Server
 name `stubs`. Tools:
 
-- `pull_stub` — input `{link: string, file?: string, overwrite?: boolean}`; output is the R1
-  JSON object. Description: "Open a one-time Stubs link and write its values into the
+- `pull_stub` — input `{link: string, file?: string, env?: string, overwrite?: boolean}`.
+  `env` writes `.env.<env>` under the same name rules as `--env`, and can't be combined with
+  `file`. Output is the R1 JSON object. Description: "Open a one-time Stubs link and write its values into the
   project's env file. Returns key names only. Never read or print the env file afterwards;
-  run commands that need the values with `npx -y --loglevel=warn -- @talix/stubs@0.6.0 run -- <cmd>`, which
-  masks them in the output."
+  run commands that need the values with `npx -y --loglevel=warn -- @talix/stubs@0.6.0 run -- <cmd>` (with `--env <name>`
+  before the `--` if you pulled with `env`), which masks them in the output."
 - `check_stub` — input `{link: string}`; output is the R2 JSON object.
 
 No `push` tool. File paths resolve against the server's working directory. The server inherits

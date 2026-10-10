@@ -64,9 +64,9 @@ describe("mcp server", () => {
     expect(tools.map((tool) => tool.name).sort()).toEqual(["check_stub", "pull_stub"]);
     const pull = tools.find((tool) => tool.name === "pull_stub")!;
     expect(pull.description).toBe(
-      `Open a one-time Stubs link and write its values into the project's env file. Returns key names only. Never read or print the env file afterwards; run commands that need the values with \`npx -y --loglevel=warn -- @talix/stubs@${readPackageVersion()} run -- <cmd>\`, which masks them in the output.`,
+      `Open a one-time Stubs link and write its values into the project's env file. Returns key names only. Never read or print the env file afterwards; run commands that need the values with \`npx -y --loglevel=warn -- @talix/stubs@${readPackageVersion()} run -- <cmd>\` (with \`--env <name>\` before the \`--\` if you pulled with \`env\`), which masks them in the output.`,
     );
-    expect(Object.keys(pull.inputSchema.properties ?? {}).sort()).toEqual(["file", "link", "overwrite"]);
+    expect(Object.keys(pull.inputSchema.properties ?? {}).sort()).toEqual(["env", "file", "link", "overwrite"]);
   });
 
   it("pulls into the working directory and returns key names only", async () => {
@@ -107,6 +107,32 @@ describe("mcp server", () => {
   it("honours file and overwrite", async () => {
     const link = await server.seed("A=1", ORIGIN);
     expect((await call("pull_stub", { link, file: "x.env", overwrite: true })).body.file).toBe("x.env");
+  });
+
+  it.each([
+    ["staging", ".env.staging"],
+    ["production.local", ".env.production.local"],
+  ])("env %s writes %s", async (env, file) => {
+    const link = await server.seed(`CANARY_SECRET=${CANARY}`, ORIGIN);
+    const result = await call("pull_stub", { link, env });
+    expect(result).toMatchObject({ isError: false, body: { ok: true, file, written: ["CANARY_SECRET"] } });
+    expect(result.raw).not.toContain(CANARY);
+    expect(await readFile(join(cwd, file), "utf8")).toContain(CANARY);
+  });
+
+  it.each([
+    [{ env: "" }],
+    [{ env: "../leak" }],
+    [{ env: "a/b" }],
+    [{ env: 7 }],
+    [{ env: "staging", file: "x.env" }],
+  ])("refuses env input %j without consuming or echoing it", async (input) => {
+    const link = await server.seed(`CANARY_SECRET=${CANARY}`, ORIGIN);
+    const result = await call("pull_stub", { link, ...input });
+    expect(result).toMatchObject({ isError: true, body: { ok: false, code: "invalid" } });
+    expect(result.raw).not.toContain("leak");
+    expect(server.sent).toEqual([]);
+    expect(server.store.size).toBe(1);
   });
 
   it("returns failures as isError results, never throwing", async () => {

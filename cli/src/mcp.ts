@@ -10,7 +10,7 @@ import { withClient } from "../../src/core/api";
 import type { Transport } from "../../src/core/ticket";
 import { checkStub } from "./check";
 import { resolveOrigin } from "./links";
-import { pullStub } from "./pull";
+import { envFileFor, pullStub } from "./pull";
 import { fail, isFailure, type Failure } from "./result";
 import { redactDeep } from "./redact";
 import { packageVersion } from "./version";
@@ -47,6 +47,7 @@ const pullInput = z
   .object({
     link: z.unknown().describe(LINK_DESCRIPTION),
     file: z.unknown().describe("Env file to write, relative to and inside the project. Defaults to .env.local."),
+    env: z.unknown().describe("Environment name: writes .env.<env>, so production writes .env.production. Used as given. Instead of file."),
     overwrite: z.unknown().describe("Replace values of keys that already exist instead of skipping them."),
   })
   .passthrough();
@@ -55,7 +56,7 @@ const checkInput = z.object({ link: z.unknown().describe(LINK_DESCRIPTION) }).pa
 type Args = Record<string, unknown>;
 
 function readPullArgs(args: Args, cwd: string): { link: string; file?: string; overwrite: boolean } | Failure {
-  const { link, file, overwrite } = args;
+  const { link, file, env, overwrite } = args;
   if (typeof link !== "string" || link.trim() === "") return fail("invalid", "`link` must be a stubs link. Nothing was consumed.");
   if (file !== undefined && (typeof file !== "string" || file.trim() === "")) {
     return fail("invalid", "`file` must be a path relative to the project. Nothing was consumed.");
@@ -66,7 +67,13 @@ function readPullArgs(args: Args, cwd: string): { link: string; file?: string; o
   if (overwrite !== undefined && typeof overwrite !== "boolean") {
     return fail("invalid", "`overwrite` must be true or false. Nothing was consumed.");
   }
-  return { link, file, overwrite: overwrite ?? false };
+  if (env === undefined) return { link, file, overwrite: overwrite ?? false };
+  if (file !== undefined) return fail("invalid", "Pass `file` or `env`, not both. Nothing was consumed.");
+  const envFile = typeof env === "string" ? envFileFor(env) : undefined;
+  if (envFile === undefined || isFailure(envFile)) {
+    return fail("invalid", "`env` must be a name like production or staging (letters, digits, '.', '_', '-'). Nothing was consumed.");
+  }
+  return { link, file: envFile, overwrite: overwrite ?? false };
 }
 
 /**
@@ -86,7 +93,7 @@ export function createMcpServer(deps: McpDeps): McpServer {
   server.registerTool(
     "pull_stub",
     {
-      description: `Open a one-time Stubs link and write its values into the project's env file. Returns key names only. Never read or print the env file afterwards; run commands that need the values with \`npx -y --loglevel=warn -- @talix/stubs@${packageVersion()} run -- <cmd>\`, which masks them in the output.`,
+      description: `Open a one-time Stubs link and write its values into the project's env file. Returns key names only. Never read or print the env file afterwards; run commands that need the values with \`npx -y --loglevel=warn -- @talix/stubs@${packageVersion()} run -- <cmd>\` (with \`--env <name>\` before the \`--\` if you pulled with \`env\`), which masks them in the output.`,
       inputSchema: pullInput,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },

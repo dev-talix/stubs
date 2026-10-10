@@ -291,7 +291,8 @@ Prints this machine's stubs id, or exits `3` if there's no identity yet.
 
 Starts an MCP server on stdio, named `stubs`, with two tools:
 
-- `pull_stub`: input `{link, file?, overwrite?}`. Returns the same object as `pull --json`.
+- `pull_stub`: input `{link, file?, env?, overwrite?}`. Returns the same object as `pull --json`.
+  `env` works like `--env`: it writes `.env.<env>` and can't be combined with `file`.
 - `check_stub`: input `{link}`. Returns the same object as `check --json`.
 
 Both handle locked links with the machine's identity, like the CLI.
