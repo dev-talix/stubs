@@ -52,6 +52,18 @@ time, and `pnpm sync-version` rewrites the literal pins in the markdown and both
 version there, run `pnpm sync-version`, add a CHANGELOG entry, publish from `cli/`, then
 deploy. `test/shared/pinned-version.test.ts` fails if anything still points at an old version.
 
+After npm has the new version, publish `cli/server.json` to the
+[MCP Registry](https://registry.modelcontextprotocol.io) as `app.talix/stubs`. The registry
+checks that the npm package's `mcpName` matches. Ownership of `talix.app` is proven by an
+Ed25519 key whose public half sits in a `v=MCPv1; k=ed25519; p=…` TXT record on the
+`talix.app` apex. The private key stays out of the repo. With `mcp-publisher` installed
+(`brew install mcp-publisher`), from `cli/`:
+
+```bash
+mcp-publisher login dns --domain talix.app --private-key "$(openssl pkey -in "$MCP_REGISTRY_KEY" -noout -text | grep -A3 'priv:' | tail -n +2 | tr -d ' :\n')"
+mcp-publisher publish
+```
+
 `compatibility_date` is pinned to a date the bundled test runtime supports. Bump it together
 with `@cloudflare/vitest-pool-workers`.
 
