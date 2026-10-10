@@ -63,9 +63,14 @@ All commands read the link from an argument. A link is `https://<origin>/t#<frag
    a value, and no error message may include one.
    - Human: `Pulled 3 values into .env.local: API_KEY, DB_URL, SECRET` then
      `Skipped 1 existing key: PORT` when relevant.
+     With no pairs: `The stub had no KEY=value lines. Its text was saved as a comment in .env.local.`
+     Use the selected filename. If only comments or blank lines remain, say nothing was written.
+     These remain successful pulls, exit `0`. Mixed stubs keep their unparsed line count.
    - JSON, one object on stdout:
      `{"ok":true,"file":".env.local","written":["API_KEY"],"skipped":["PORT"],"unparsed":0}`
      or `{"ok":false,"code":"void","message":"..."}`.
+     No-pair successes add `message` with the same explanation as human output. MCP returns
+     this object unchanged through its existing redaction step. Never include the text itself.
 7. The stub is consumed the moment the server answers the claim, so every local check that can
    run before it (origin, target path, git guard) must. If the write itself fails after the
    claim (disk, permissions), the CLI writes the values atomically to
@@ -189,7 +194,7 @@ name `stubs`. Tools:
 - `pull_stub` — input `{link: string, file?: string, overwrite?: boolean}`; output is the R1
   JSON object. Description: "Open a one-time Stubs link and write its values into the
   project's env file. Returns key names only. Never read or print the env file afterwards;
-  run commands that need the values with `npx -y --loglevel=warn -- @talix/stubs@0.5.1 run -- <cmd>`, which
+  run commands that need the values with `npx -y --loglevel=warn -- @talix/stubs@0.5.2 run -- <cmd>`, which
   masks them in the output."
 - `check_stub` — input `{link: string}`; output is the R2 JSON object.
 
@@ -324,7 +329,7 @@ environment on error, so the pulled values would land in the transcript anyway (
    Node's scan stops before our arguments on every launch
    that goes through the executable: the direct executable, the npm bin link, a global npm
    install, and `pnpm dlx`. Npx needs its own early separator:
-   `npx -y --loglevel=warn -- @talix/stubs@0.5.1 run -- <cmd>`. `--loglevel=warn` stops npm 12's
+   `npx -y --loglevel=warn -- @talix/stubs@0.5.2 run -- <cmd>`. `--loglevel=warn` stops npm 12's
    `npm notice run` line, which echoes the whole command line. Plain npx without that `--` is unprotected:
    the Node process running npx can load the file and execute its hooks before our launcher
    starts. Raw `node dist/stubs.js` is also unprotected because it skips the launcher.
@@ -485,17 +490,17 @@ guarantee needs the values kept out of the agent's reach altogether, which is TA
 ## Agent docs (R7)
 
 - `cli/README.md`: install, the four commands, exit codes, the no-leak guarantee, MCP setup
-  for Claude Code (`claude mcp add stubs -- npx -y @talix/stubs@0.5.1 mcp`), Cursor
+  for Claude Code (`claude mcp add stubs -- npx -y @talix/stubs@0.5.2 mcp`), Cursor
   (`.cursor/mcp.json`), and Codex (`~/.codex/config.toml` `[mcp_servers.stubs]`).
 - The root `README.md` gets a short "For agents" section linking there, plus this `AGENTS.md`
   snippet:
 
-  > When given a link on stubs.talix.app, run `npx -y --loglevel=warn -- @talix/stubs@0.5.1 pull <link>` (or the
+  > When given a link on stubs.talix.app, run `npx -y --loglevel=warn -- @talix/stubs@0.5.2 pull <link>` (or the
   > `pull_stub` tool). It writes the values into `.env.local` and prints only the key names.
   > Never `cat`, read, or print `.env*` files.
 
 - The opened-ticket page in the web app (`src/client/reveal.ts`) and the sealed page get one
-  line of fine print: "Pulling this into a project? `npx -y --loglevel=warn -- @talix/stubs@0.5.1 pull <link>` writes it
+  line of fine print: "Pulling this into a project? `npx -y --loglevel=warn -- @talix/stubs@0.5.2 pull <link>` writes it
   straight to .env.local." On the sealed page the COPY button copies the command with the real link (it's the
   recipient's own), but on screen the link reads `<this link>`: the key must not sit on
   screen for screenshots and screen shares. The opened page shows the generic form.
@@ -540,7 +545,7 @@ recipient instead of bare.
   (`stubs1…`), validated on input. When set, the printed ticket says "LOCKED" and the fine print
   says the link only opens on that machine with `stubs pull`.
 - Web `/t` page on a v2 link: "LOCKED STUB" screen, not void, not consumed: it shows the
-  `npx -y --loglevel=warn -- @talix/stubs@0.5.1 pull <link>` command with a copy button and explains why the browser
+  `npx -y --loglevel=warn -- @talix/stubs@0.5.2 pull <link>` command with a copy button and explains why the browser
   can't open it. No status call is made (the browser can't prove possession).
 - `stubs pull` unwraps with the local identity before proceeding as R1. `stubs check` likewise.
 - `stubs push --to <public id>` locks from the CLI.

@@ -47,6 +47,10 @@ Then tell the user which keys were written (`written`), which were already set a
 references (`held`, also kept as comments; the user decides whether to uncomment them), and pass
 on any `warnings`.
 
+If the result includes `message`, pass it on too. A stub with no `KEY=value` lines sets no
+keys. Don't read the file or use the link as a value. If `unparsed` is above 0, its text was
+saved as comments; ask the user to place it under the intended key themselves.
+
 ## Exit codes
 
 | Code | Meaning | What to do |

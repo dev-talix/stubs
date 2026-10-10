@@ -372,7 +372,7 @@ function describe(result: Success, out: Output): void {
     return;
   }
   const lines = [
-    `Pulled ${count(result.written.length, "value")} into ${result.file}${list(result.written)}`,
+    result.message ?? `Pulled ${count(result.written.length, "value")} into ${result.file}${list(result.written)}`,
   ];
   if (result.skipped.length > 0) {
     lines.push(`Skipped ${count(result.skipped.length, "existing key")}${list(result.skipped)}`);
@@ -380,7 +380,7 @@ function describe(result: Success, out: Output): void {
   if (result.held.length > 0) {
     lines.push(`Held back ${count(result.held.length, "value")} with a $ reference${list(result.held)}`);
   }
-  if (result.unparsed > 0) {
+  if (result.unparsed > 0 && !result.message) {
     lines.push(`Kept ${count(result.unparsed, "unparsed line")} as comments in ${result.file}.`);
   }
   out.stdout(lines.join("\n") + "\n");

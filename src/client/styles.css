@@ -404,11 +404,6 @@ body {
   letter-spacing: 0.08em;
 }
 
-.item.invalid .key,
-.item.invalid .mask {
-  color: var(--stamp);
-}
-
 .empty {
   color: var(--ink-soft);
 }
@@ -624,6 +619,10 @@ body {
   background: var(--paper-recess);
   font: 13px / 1.4 var(--mono);
   text-overflow: ellipsis;
+}
+
+.link[hidden] {
+  display: none;
 }
 
 /* Perforated tear line with punched notches at both edges. */

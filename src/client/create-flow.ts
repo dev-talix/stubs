@@ -11,18 +11,22 @@ export interface Draft {
   pairCount: number;
   bytes: number;
   overLimit: boolean;
+  /** Text with no KEY=value lines. It opens as plain text, and `stubs pull` can't place it. */
+  plainText: boolean;
   printable: boolean;
 }
 
 export function assessDraft(text: string): Draft {
   const lines = parseDotenv(text);
+  const pairCount = pairsOf(lines).length;
   const bytes = new TextEncoder().encode(text).length;
   const overLimit = bytes > MAX_PLAINTEXT_BYTES;
   return {
     lines,
-    pairCount: pairsOf(lines).length,
+    pairCount,
     bytes,
     overLimit,
+    plainText: pairCount === 0 && lines.length > 0,
     printable: text.trim() !== "" && !overLimit,
   };
 }
@@ -33,7 +37,7 @@ export type CreateState =
   | { kind: "editing" }
   | { kind: "printing" }
   | { kind: "failed"; reason: FailureReason }
-  | { kind: "printed"; link: string; expiresAt: number; pairCount: number; locked: boolean };
+  | { kind: "printed"; link: string; expiresAt: number; pairCount: number; lineCount: number; locked: boolean };
 
 /** `lockTo` is a recipient's public id, or empty for an ordinary stub. */
 export type Issue = (text: string, ttlSeconds: TtlSeconds, lockTo: string) => Promise<IssueOutcome>;
@@ -62,7 +66,7 @@ export class CreateFlow {
 
   async submit(text: string, ttlSeconds: TtlSeconds, lockTo = ""): Promise<void> {
     if (!this.canSubmit(text, lockTo)) return;
-    const { pairCount } = assessDraft(text);
+    const { pairCount, lines } = assessDraft(text);
     this.#set({ kind: "printing" });
     // Never strand the flow in "printing": an unexpected throw becomes an ordinary failure.
     const outcome = await this.issue(text, ttlSeconds, lockTo).catch(
@@ -70,7 +74,7 @@ export class CreateFlow {
     );
     this.#set(
       outcome.kind === "issued"
-        ? { kind: "printed", link: outcome.link, expiresAt: outcome.expiresAt, pairCount, locked: lockTo !== "" }
+        ? { kind: "printed", link: outcome.link, expiresAt: outcome.expiresAt, pairCount, lineCount: lines.length, locked: lockTo !== "" }
         : { kind: "failed", reason: outcome.reason },
     );
   }

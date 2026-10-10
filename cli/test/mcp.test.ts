@@ -80,6 +80,30 @@ describe("mcp server", () => {
     expect(await readFile(join(cwd, ".env.local"), "utf8")).toContain(CANARY);
   });
 
+  it.each([".env.local", "custom.env"])("explains plain text saved as comments in %s without exposing it", async (file) => {
+    const link = await server.seed(CANARY, ORIGIN);
+    const result = await call("pull_stub", { link, file });
+    expect(result).toMatchObject({
+      isError: false,
+      body: {
+        ok: true, file, written: [], skipped: [], held: [], unparsed: 1,
+        message: `The stub had no KEY=value lines. Its text was saved as a comment in ${file}.`,
+      },
+    });
+    expect(result.raw).not.toContain(CANARY);
+    expect(await readFile(join(cwd, file), "utf8")).toBe(`# unparsed: ${CANARY}\n`);
+    expect(server.store.size).toBe(0);
+  });
+
+  it("keeps mixed stubs as key names and an unparsed count", async () => {
+    const link = await server.seed(`KEY=${CANARY}\nstray-secret`, ORIGIN);
+    const result = await call("pull_stub", { link });
+    expect(result.body).toMatchObject({ written: ["KEY"], unparsed: 1 });
+    expect(result.body).not.toHaveProperty("message");
+    expect(result.raw).not.toContain(CANARY);
+    expect(result.raw).not.toContain("stray-secret");
+  });
+
   it("honours file and overwrite", async () => {
     const link = await server.seed("A=1", ORIGIN);
     expect((await call("pull_stub", { link, file: "x.env", overwrite: true })).body.file).toBe("x.env");

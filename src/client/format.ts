@@ -29,3 +29,7 @@ export function formatKilobytes(bytes: number): string {
   const kb = bytes / 1024;
   return `${Number.isInteger(kb) ? kb : kb.toFixed(1)} KB`;
 }
+
+export function formatLines(count: number): string {
+  return `${count} ${count === 1 ? "LINE" : "LINES"}`;
+}

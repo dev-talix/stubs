@@ -42,7 +42,7 @@ describe("CreateFlow", () => {
 
     pending[0]!.resolve({ kind: "issued", link: "L", expiresAt: 9 });
     await first;
-    expect(flow.state).toEqual({ kind: "printed", link: "L", expiresAt: 9, pairCount: 1, locked: false });
+    expect(flow.state).toEqual({ kind: "printed", link: "L", expiresAt: 9, pairCount: 1, lineCount: 1, locked: false });
     expect(flow.canSubmit("A=1")).toBe(false);
   });
 
@@ -53,6 +53,16 @@ describe("CreateFlow", () => {
     await run;
     expect(recipients).toEqual([RECIPIENT]);
     expect(flow.state).toMatchObject({ kind: "printed", locked: true });
+  });
+
+  it("prints plain text and retains its line count", async () => {
+    const { flow, calls, pending } = setup();
+    expect(flow.canSubmit("sk_live_abc123")).toBe(true);
+    const run = flow.submit("sk_live_abc123\nsecond line", 3600);
+    pending[0]!.resolve({ kind: "issued", link: "L", expiresAt: 9 });
+    await run;
+    expect(calls).toEqual(["sk_live_abc123\nsecond line"]);
+    expect(flow.state).toMatchObject({ kind: "printed", pairCount: 0, lineCount: 2 });
   });
 
   it("won't submit with a half-typed recipient", async () => {
@@ -105,8 +115,19 @@ describe("CreateFlow", () => {
 });
 
 describe("assessDraft", () => {
+  it("allows a bare value with no KEY=value pair", () => {
+    expect(assessDraft("sk_live_abc123")).toMatchObject({ pairCount: 0, printable: true, overLimit: false });
+  });
+
   it("counts pairs and bytes", () => {
     expect(assessDraft("A=1\n# c\nnope\nB=ü")).toMatchObject({ pairCount: 2, bytes: 17, printable: true });
     expect(assessDraft("")).toMatchObject({ pairCount: 0, printable: false, overLimit: false });
+  });
+
+  it("calls a draft plain text only when it has lines but no pairs", () => {
+    expect(assessDraft("sk_live_abc123").plainText).toBe(true);
+    expect(assessDraft("API_KEY=abc\nstray note").plainText).toBe(false);
+    expect(assessDraft("# just a comment").plainText).toBe(false);
+    expect(assessDraft("").plainText).toBe(false);
   });
 });

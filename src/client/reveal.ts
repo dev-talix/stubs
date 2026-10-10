@@ -178,6 +178,17 @@ function pullHint(link: string, announce: Announce, lead = "Pulling it into a pr
   );
 }
 
+export function openedLabels(pairCount: number) {
+  const plainText = pairCount === 0;
+  return {
+    copy: plainText ? "COPY" : "COPY ALL AS .ENV",
+    copied: plainText ? "Copied." : "All values copied in .env format.",
+    download: plainText ? "DOWNLOAD" : "DOWNLOAD .ENV",
+    filename: plainText ? "stub.txt" : ".env",
+    message: `Ticket opened. ${plainText ? "Text is ready to copy." : `${pairCount} ${pairCount === 1 ? "value" : "values"} ready to copy.`} The link is now void.`,
+  };
+}
+
 function renderOpened(receipt: HTMLElement, plaintext: string, context: RevealContext) {
   const { announce } = context;
   // Ask before leaving the only copy, but only while this page is live: once it's hidden the
@@ -189,6 +200,7 @@ function renderOpened(receipt: HTMLElement, plaintext: string, context: RevealCo
   const lines = parseDotenv(plaintext);
   const pairs = pairsOf(lines);
   const unreadable = lines.length - pairs.length;
+  const labels = openedLabels(pairs.length);
 
   const list = h(
     "ol",
@@ -216,17 +228,17 @@ function renderOpened(receipt: HTMLElement, plaintext: string, context: RevealCo
   );
 
   const copyAll = copyButton({
-    label: "COPY ALL AS .ENV",
+    label: labels.copy,
     className: "print",
     text: () => plaintext,
     announce,
-    copiedMessage: "All values copied in .env format.",
+    copiedMessage: labels.copied,
   });
 
-  const download = h("button", { type: "button", class: "text-button" }, "DOWNLOAD .ENV");
+  const download = h("button", { type: "button", class: "text-button" }, labels.download);
   download.addEventListener("click", () => {
     const url = URL.createObjectURL(new Blob([plaintext], { type: "text/plain" }));
-    h("a", { href: url, download: ".env" }).click();
+    h("a", { href: url, download: labels.filename }).click();
     setTimeout(() => URL.revokeObjectURL(url), 0);
   });
 
@@ -245,24 +257,26 @@ function renderOpened(receipt: HTMLElement, plaintext: string, context: RevealCo
         ],
         [
           h("div", { class: "unroll" }, pairs.length > 0 ? list : h("pre", { class: "raw" }, plaintext)),
-          unreadable > 0 &&
+          pairs.length > 0 &&
+            unreadable > 0 &&
             h(
               "p",
               { class: "fine" },
               `${unreadable} ${unreadable === 1 ? "line wasn't" : "lines weren't"} KEY=VALUE. ` +
                 "Copy all includes them exactly as sent.",
             ),
-          h(
-            "p",
-            { class: "fine" },
-            "Next time, skip the copying: ",
-            h("code", {}, `${PULL_COMMAND} <link>`),
-            ".",
-          ),
+          pairs.length > 0 &&
+            h(
+              "p",
+              { class: "fine" },
+              "Next time, skip the copying: ",
+              h("code", {}, `${PULL_COMMAND} <link>`),
+              ".",
+            ),
         ],
         [copyAll, download],
       ],
-      message: `Ticket opened. ${pairs.length} values ready to copy. The link is now void.`,
+      message: labels.message,
       focus: copyAll,
     },
     announce,

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.2
+
+- Plain-text pulls now explain that the stub had no `KEY=value` lines and its text was
+  saved as comments. CLI JSON and MCP results include the same explanation in `message`.
+  Values stay out of output, and successful pulls still exit `0`.
+
 ## 0.5.1
 
 - The npm README is shorter and opens with a banner. Command internals, masking details,

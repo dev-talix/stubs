@@ -59,6 +59,10 @@ How the write works:
   appended, but the result carries a warning: dotenv parsers may not read past that line.
 - Lines in the stub that aren't `KEY=VALUE` are appended as comments prefixed `# unparsed: `
   so nothing is lost, and counted as `unparsed`.
+  With no pairs, human output says: "The stub had no KEY=value lines. Its text was saved as
+  a comment in .env.local." JSON and MCP include this explanation in `message`, using the
+  selected filename. No values are printed; exit status stays `0`. Comments-only or blank
+  stubs instead report that nothing was written.
 - If the write itself fails after the stub opened (disk full, permissions), the values go to
   `~/.config/stubs/recovered/<timestamp>-<file>` with mode `0600`, outside any repository, and
   the error names that path. Move the values and delete it.

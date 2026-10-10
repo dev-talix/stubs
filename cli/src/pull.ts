@@ -41,6 +41,8 @@ export interface PullSuccess {
   /** Kept as comments in the file because a dotenv-expand consumer would expand them. */
   held: string[];
   unparsed: number;
+  /** Explains a successful pull with no KEY=value lines, without exposing its text. */
+  message?: string;
   warnings: string[];
 }
 
@@ -99,6 +101,7 @@ export async function pullStub(options: PullOptions, deps: PullDeps): Promise<Pu
       `${key} looks like a $NAME reference. Tools that expand .env values (Vite, Next.js) would replace it with another variable's value, so it was kept as a comment in ${file}. If the $ is literal, uncomment it by hand.`,
     );
   }
+  const noPairs = plan.written.length + plan.skipped.length + plan.held.length === 0;
   return {
     ok: true,
     file,
@@ -106,6 +109,12 @@ export async function pullStub(options: PullOptions, deps: PullDeps): Promise<Pu
     skipped: plan.skipped,
     held: plan.held,
     unparsed: plan.unparsed,
+    ...(noPairs && {
+      message:
+        plan.unparsed > 0
+          ? `The stub had no KEY=value lines. Its text was saved as a comment in ${file}.`
+          : "The stub had no KEY=value lines. There were only comments or blank lines, so nothing was written.",
+    }),
     warnings,
   };
 }

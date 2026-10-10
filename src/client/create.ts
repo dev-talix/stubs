@@ -8,7 +8,7 @@ import {
   type Issue,
 } from "./create-flow";
 import { h } from "./dom";
-import { formatKilobytes, formatStamp } from "./format";
+import { formatKilobytes, formatLines, formatStamp } from "./format";
 import { barcode, perforation, showReceipt, type Announce } from "./receipt";
 import { supportsLocking } from "../core/lock";
 import { NPX_STUBS } from "../shared/stubs-cli";
@@ -21,6 +21,13 @@ import {
 } from "../shared/protocol";
 
 const LIMIT = formatKilobytes(MAX_PLAINTEXT_BYTES);
+
+export function agentInstructions(link: string): string {
+  return (
+    `Pull these .env values with: ${NPX_STUBS} pull '${link}'\n` +
+    "It writes .env.local and prints only the key names. Run the command instead of opening or fetching the link."
+  );
+}
 
 const TTL_LABELS: Record<TtlSeconds, string> = {
   300: "5 MIN",
@@ -63,6 +70,11 @@ export function renderCreate(receipt: HTMLElement, announce: Announce, issue: Is
   const size = h("span", { id: "env-size", class: "size" });
   const items = h("ol", { class: "items", "aria-label": "Items on this ticket" });
   const itemCount = h("span", {});
+  const textHint = h(
+    "p",
+    { class: "fine", hidden: true },
+    "Opens as plain text in a browser. ", h("code", {}, "stubs pull"), " needs KEY=value.",
+  );
   const error = h("p", { class: "error", role: "alert" });
   const print = h("button", { type: "button", class: "print" }, "PRINT TICKET");
 
@@ -139,20 +151,21 @@ export function renderCreate(receipt: HTMLElement, announce: Announce, issue: Is
 
     size.textContent = `${formatKilobytes(draft.bytes)} / ${LIMIT}`;
     size.classList.toggle("over", draft.overLimit);
-    itemCount.textContent = `ITEMS ${draft.pairCount}`;
+    itemCount.textContent = draft.plainText ? formatLines(draft.lines.length) : `ITEMS ${draft.pairCount}`;
+    textHint.hidden = !draft.plainText;
     items.replaceChildren(
       ...(draft.lines.length === 0
         ? [h("li", { class: "empty" }, "Nothing to print yet.")]
         : draft.lines.map((line) =>
             h(
               "li",
-              { class: line.kind === "pair" ? "item" : "item invalid" },
+              { class: "item" },
               h("span", { class: "key" }, line.kind === "pair" ? line.key : `LINE ${line.line}`),
               h("span", { class: "leader", "aria-hidden": "true" }),
               h(
                 "span",
                 { class: "mask" },
-                line.kind === "invalid" ? "CAN'T READ" : line.value === "" ? "EMPTY" : "••••••••",
+                line.kind === "invalid" ? "TEXT" : line.value === "" ? "EMPTY" : "••••••••",
               ),
             ),
           )),
@@ -187,7 +200,7 @@ export function renderCreate(receipt: HTMLElement, announce: Announce, issue: Is
     {
       sections: [
         [field],
-        [h("p", { class: "section-label" }, "ITEMS"), items],
+        [h("p", { class: "section-label" }, "ITEMS"), items, textHint],
         [ttl],
         [lock],
         [
@@ -236,10 +249,37 @@ function renderTicket(
     },
   });
 
+  const instructions = h(
+    "textarea",
+    {
+      class: "link",
+      readonly: true,
+      hidden: true,
+      rows: "6",
+      "aria-label": "Instructions for an agent",
+    },
+    agentInstructions(ticket.link),
+  );
+  instructions.addEventListener("focus", () => instructions.select());
+  const copyAgent = copyButton({
+    label: "COPY FOR AN AGENT",
+    className: "text-button",
+    text: () => agentInstructions(ticket.link),
+    announce,
+    copiedMessage: "Agent instructions copied.",
+    onRefused: () => {
+      instructions.hidden = false;
+      instructions.focus();
+      announce("Couldn't copy automatically. The instructions are selected; copy them by hand.");
+    },
+  });
+
   const another = h("button", { type: "button", class: "text-button" }, "PRINT ANOTHER");
   another.addEventListener("click", printAnother);
 
-  const items = `${ticket.pairCount} ${ticket.pairCount === 1 ? "ITEM" : "ITEMS"}`;
+  const items = ticket.pairCount === 0 && ticket.lineCount > 0
+    ? formatLines(ticket.lineCount)
+    : `${ticket.pairCount} ${ticket.pairCount === 1 ? "ITEM" : "ITEMS"}`;
   const facts = `${items} · VALID UNTIL ${formatStamp(ticket.expiresAt)}${ticket.locked ? " · LOCKED" : ""}`;
   const sendHint = ticket.locked
     ? `Locked: only the recipient's machine can open it, with ${NPX_STUBS} pull. ` +
@@ -256,6 +296,8 @@ function renderTicket(
         [
           linkField,
           copy,
+          copyAgent,
+          instructions,
           h("p", { class: "fine" }, sendHint),
           perforation("KEEP THIS STUB"),
           barcode(),

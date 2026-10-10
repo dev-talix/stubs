@@ -98,6 +98,46 @@ describe("pull", () => {
     expect(await envFile()).toBe("A=1\n# unparsed: something odd\n");
   });
 
+  it.each([false, true])("explains a plain-text pull without printing it, json=%s", async (json) => {
+    const text = "sk_live_abc123\nsecond-secret-line";
+    const link = await server.seed(text, ORIGIN);
+    const file = json ? "custom.env" : ".env.local";
+    const result = await pull(link, "--to", file, ...(json ? ["--json"] : []));
+    const message = `The stub had no KEY=value lines. Its text was saved as a comment in ${file}.`;
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe("");
+    if (json) {
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        ok: true, written: [], skipped: [], held: [], unparsed: 2, message,
+      });
+    } else {
+      expect(result.stdout).toBe(message + "\n");
+    }
+    for (const value of text.split("\n")) expect(result.stdout + result.stderr).not.toContain(value);
+    expect(await envFile(file)).toBe("# unparsed: sk_live_abc123\n# unparsed: second-secret-line\n");
+    expect(server.store.size).toBe(0);
+    expect((await pull(link)).code).toBe(2);
+  });
+
+  it("does not claim to save comments-only text", async () => {
+    const link = await server.seed("# just a comment\n", ORIGIN);
+    const result = await pull(link);
+    expect(result).toEqual({
+      code: 0,
+      stdout: "The stub had no KEY=value lines. There were only comments or blank lines, so nothing was written.\n",
+      stderr: "",
+    });
+    expect(await readdir(cwd)).toEqual([]);
+  });
+
+  it("does not mistake skipped or held pairs for plain text", async () => {
+    await writeFile(join(cwd, ".env.local"), "PORT=3000\n");
+    const link = await server.seed("PORT=4000\nREF=$OTHER\nstray text", ORIGIN);
+    const result = await pull(link, "--json");
+    expect(JSON.parse(result.stdout)).toMatchObject({ written: [], skipped: ["PORT"], held: ["REF"], unparsed: 1 });
+    expect(JSON.parse(result.stdout)).not.toHaveProperty("message");
+  });
+
   it("exits 6 when the stub won't decrypt", async () => {
     const link = await server.seed(STUB, ORIGIN);
     server.tamperAll();

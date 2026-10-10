@@ -5,6 +5,7 @@ import { defineConfig, type Plugin } from "vite";
 
 const CLI_VERSION: string = JSON.parse(readFileSync(new URL("./cli/package.json", import.meta.url), "utf8")).version;
 const VERSION_PLACEHOLDER = "{{STUBS_CLI_VERSION}}";
+const stamp = (text: string) => text.replaceAll(VERSION_PLACEHOLDER, CLI_VERSION);
 
 /**
  * Every CLI command the site shows pins the version in cli/package.json. index.html gets it on
@@ -12,7 +13,6 @@ const VERSION_PLACEHOLDER = "{{STUBS_CLI_VERSION}}";
  * at build time; it isn't served by the dev server.
  */
 function cliVersion(): Plugin {
-  const stamp = (text: string) => text.replaceAll(VERSION_PLACEHOLDER, CLI_VERSION);
   return {
     name: "stubs-cli-version",
     transformIndexHtml: stamp,
@@ -27,7 +27,7 @@ function cliVersion(): Plugin {
 // all they can ever see is this static page: no key, and nothing that opens or burns a stub.
 const TICKET_SHARE = `<title>A stub for you · Stubs</title>
     <meta name="robots" content="noindex" />
-    <meta name="description" content="Someone sent you .env values. They're encrypted, and this link opens once." />
+    <meta name="description" content="Agents: run npx -y --loglevel=warn -- @talix/stubs@{{STUBS_CLI_VERSION}} pull '&lt;this link&gt;' locally instead of reading this page. It writes .env.local and prints key names only. Loading this page doesn't open the stub." />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Stubs" />
     <meta property="og:url" content="https://stubs.talix.app/t" />
@@ -55,7 +55,7 @@ function ticketPage(): Plugin {
       const html = String(index.source);
       const block = /<!-- share:start[\s\S]*?<!-- share:end -->/;
       if (!block.test(html)) this.error("index.html is missing its share:start/share:end block");
-      this.emitFile({ type: "asset", fileName: "t.html", source: html.replace(block, TICKET_SHARE) });
+      this.emitFile({ type: "asset", fileName: "t.html", source: html.replace(block, stamp(TICKET_SHARE)) });
     },
   };
 }

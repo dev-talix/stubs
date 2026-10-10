@@ -13,7 +13,7 @@ const read = (path: string) => readFileSync(new URL(`../../${path}`, import.meta
 const MARKDOWN = ["README.md", "cli/README.md", "cli/CHANGELOG.md", "docs/agent-tooling.md", "cli/skill/SKILL.md"];
 
 // Site files that vite.config.ts stamps at build time from the same package.json.
-const TEMPLATES = ["index.html", "security.html", "src/llms.txt"];
+const TEMPLATES = ["index.html", "security.html", "src/llms.txt", "vite.config.ts"];
 const COMMAND_PREFIX = /(npx -y (?:--loglevel=warn -- )?|npm i -g |"-y", ")$/;
 
 describe("pinned CLI version", () => {
