@@ -26,6 +26,60 @@ const pull = (...args: string[]) => runCli(["pull", ...args], { server, cwd });
 const envFile = (name = ".env.local") => readFile(join(cwd, name), "utf8");
 
 describe("pull", () => {
+  it.each(["staging", "prod", "production", "stage", "production.local", "QA_1-blue"])(
+    "writes the literal --env %s file and reports it in JSON", async (name) => {
+      await exec("git", ["init", "-q"], { cwd });
+      const file = `.env.${name}`;
+      await writeFile(join(cwd, ".gitignore"), `${file}\n`);
+      const link = await server.seed(STUB, ORIGIN);
+      const result = await pull(link, "--env", name, "--json");
+      expect(result.code).toBe(0);
+      expect(JSON.parse(result.stdout)).toMatchObject({ ok: true, file, written: ["API_KEY", "DB_URL", "SECRET"] });
+      expect(await envFile(file)).toContain("API_KEY=sk-123");
+    },
+  );
+
+  it("refuses --env with --to before consuming the stub", async () => {
+    const link = await server.seed(STUB, ORIGIN);
+    const result = await pull(link, "--env", "staging", "--to", "other.env", "--json");
+    expect(result.code).toBe(3);
+    expect(JSON.parse(result.stdout)).toMatchObject({ ok: false, code: "invalid", message: expect.stringContaining("--env cannot be combined with --to") });
+    expect(server.sent).toEqual([]);
+    expect(server.store.size).toBe(1);
+    expect(await readdir(cwd)).toEqual([]);
+    expect((await pull(link)).code).toBe(0);
+  });
+
+  it.each(["../x", "a/b", "", "a\\b", "two words", "pasted-secret\n"])(
+    "refuses invalid --env %j without echoing it or consuming the stub", async (name) => {
+      const link = await server.seed(STUB, ORIGIN);
+      const result = await pull(link, "--env", name, "--json");
+      expect(result.code).toBe(3);
+      expect(JSON.parse(result.stdout)).toEqual({
+        ok: false, code: "invalid",
+        message: "--env takes a name like production or staging (letters, digits, '.', '_', '-'). Run `stubs pull --help`.",
+      });
+      if (name !== "") expect(result.stdout + result.stderr).not.toContain(name);
+      expect(server.sent).toEqual([]);
+      expect(server.store.size).toBe(1);
+      expect(await readdir(cwd)).toEqual([]);
+      expect((await pull(link)).code).toBe(0);
+    },
+  );
+
+  it("keeps the git guard for --env files", async () => {
+    await exec("git", ["init", "-q"], { cwd });
+    const link = await server.seed(STUB, ORIGIN);
+    const result = await pull(link, "--env", "prod");
+    expect(result.code).toBe(5);
+    expect(result.stderr).toContain(".env.prod");
+    expect(server.sent).toEqual([]);
+    expect(server.store.size).toBe(1);
+    await expect(stat(join(cwd, ".env.prod"))).rejects.toThrow();
+    await writeFile(join(cwd, ".gitignore"), ".env.prod\n");
+    expect((await pull(link, "--env", "prod")).code).toBe(0);
+  });
+
   it("writes a 0600 file and reports key names only", async () => {
     const link = await server.seed(STUB, ORIGIN);
     const result = await pull(link);
@@ -521,6 +575,46 @@ describe("check", () => {
 
 describe("push", () => {
   const push = (args: string[], stdin?: string) => runCli(["push", ...args], { server, cwd, stdin });
+
+  it("reads .env.prod with --env prod", async () => {
+    await writeFile(join(cwd, ".env.prod"), "PROD=production-secret\n");
+    await writeFile(join(cwd, ".env.local"), "LOCAL=wrong-file\n");
+    const result = await push(["--env", "prod", "--json"]);
+    expect(result.code).toBe(0);
+    const { link } = JSON.parse(result.stdout);
+    const target = await tempDir();
+    expect((await runCli(["pull", link], { server, cwd: target })).code).toBe(0);
+    expect(await readFile(join(target, ".env.local"), "utf8")).toBe("PROD=production-secret\n");
+  });
+
+  it.each([[["other.env"]], [["-"]], [["--prompt"]]])(
+    "refuses --env with %j before reading or sending", async (args) => {
+      await writeFile(join(cwd, ".env.prod"), STUB);
+      await writeFile(join(cwd, "other.env"), STUB);
+      const result = await runCli(["push", "--env", "prod", ...args, "--json"], {
+        server, cwd, stdin: STUB,
+        readPrompt: async () => { throw new Error("prompt must not run"); },
+      });
+      expect(result.code).toBe(3);
+      expect(JSON.parse(result.stdout)).toMatchObject({ ok: false, code: "invalid", message: expect.stringContaining("--env cannot be combined") });
+      expect(server.sent).toEqual([]);
+      expect(server.store.size).toBe(0);
+    },
+  );
+
+  it.each(["../x", "a/b", "", "a\\b", "two words", "pasted-secret\n"])(
+    "refuses invalid --env %j without echoing it or sending", async (name) => {
+      const result = await push(["--env", name, "--json"]);
+      expect(result.code).toBe(3);
+      expect(JSON.parse(result.stdout)).toEqual({
+        ok: false, code: "invalid",
+        message: "--env takes a name like production or staging (letters, digits, '.', '_', '-'). Run `stubs push --help`.",
+      });
+      if (name !== "") expect(result.stdout + result.stderr).not.toContain(name);
+      expect(server.sent).toEqual([]);
+      expect(server.store.size).toBe(0);
+    },
+  );
 
   it("seals .env.local by default and prints a link that pulls", async () => {
     await writeFile(join(cwd, ".env.local"), "A=1\n");

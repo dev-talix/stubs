@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- `pull`, `run`, and `push` accept `--env <name>` to use `.env.<name>` in the current directory.
+  Names are literal. Invalid names and conflicting file options are refused before any action.
+
 ## 0.5.2
 
 - Plain-text pulls now explain that the stub had no `KEY=value` lines and its text was

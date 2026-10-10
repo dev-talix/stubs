@@ -64,8 +64,10 @@ const OWN_GROUP = process.platform !== "win32";
 
 export interface RunOptions {
   command: string[];
-  /** Env files (`--from`), read in order. Default `.env.local`. */
+  /** Env files, read in order. Default `.env.local`. */
   envFiles?: string[];
+  /** Which flag selected the files, for messages that must not print user paths. */
+  envFileFlag?: "--from" | "--env";
 }
 
 export interface RunDeps {
@@ -92,19 +94,19 @@ export interface LoadedEnv {
  * one the environment already sets to something else, stops the run: the first could select
  * code or redirect traffic, and the second has two sources of truth.
  */
-export async function loadEnvFiles(files: string[], deps: Pick<RunDeps, "cwd" | "env">): Promise<LoadedEnv | Failure> {
+export async function loadEnvFiles(files: string[], deps: Pick<RunDeps, "cwd" | "env">, flag: "--from" | "--env" = "--from"): Promise<LoadedEnv | Failure> {
   const values = new Map<string, string>();
   const needles: Needle[] = [];
   const refused = new Set<string>();
   const conflicting = new Set<string>();
   for (const [index, file] of files.entries()) {
-    const name = fileLabel(file, index, files.length);
+    const name = fileLabel(file, index, files.length, flag);
     let text: string;
     try {
       text = await readFile(resolve(deps.cwd, file), "utf8");
     } catch (error) {
       const code = errorCode(error);
-      if (code === "ENOENT") return fail("invalid", `${name} doesn't exist. Pull a stub first, or check --from.`);
+      if (code === "ENOENT") return fail("invalid", `${name} doesn't exist. Pull a stub first, or check ${flag}.`);
       if (code === "EISDIR") return fail("invalid", `${name} is a folder, not a file.`);
       return fail("error", `Couldn't read ${name} (${code}).`);
     }
@@ -142,7 +144,8 @@ export async function loadEnvFiles(files: string[], deps: Pick<RunDeps, "cwd" | 
 }
 
 /** Names the default file, which is a constant, and otherwise only the flag: a path could be a value. */
-function fileLabel(file: string, index: number, total: number): string {
+function fileLabel(file: string, index: number, total: number, flag: "--from" | "--env"): string {
+  if (flag === "--env") return "The --env file";
   if (file === DEFAULT_ENV_FILE) return DEFAULT_ENV_FILE;
   return total === 1 ? "The --from file" : `--from file number ${index + 1}`;
 }
@@ -160,7 +163,7 @@ export async function runCommand(options: RunOptions, deps: RunDeps): Promise<nu
   }
 
   const files = options.envFiles?.length ? options.envFiles : [DEFAULT_ENV_FILE];
-  const loaded = await loadEnvFiles(files, deps);
+  const loaded = await loadEnvFiles(files, deps, options.envFileFlag);
   if ("ok" in loaded) return loaded;
   if (loaded.values.size === 0) deps.warn(`The env file${files.length === 1 ? "" : "s"} set no values for the command.`);
 

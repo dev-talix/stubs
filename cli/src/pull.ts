@@ -13,6 +13,14 @@ import { errorCode, fail, isFailure, type Failure } from "./result";
 
 export const DEFAULT_ENV_FILE = ".env.local";
 
+/** Environment names are literal suffixes, never paths or aliases. */
+export function envFileFor(name: string): string | Failure {
+  if (name === "" || /[^A-Za-z0-9._-]/.test(name)) {
+    return fail("invalid", "--env takes a name like production or staging (letters, digits, '.', '_', '-').");
+  }
+  return `.env.${name}`;
+}
+
 export interface PullOptions {
   link: string;
   /** Allowed origin for the link. */

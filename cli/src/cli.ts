@@ -11,7 +11,7 @@ import { checkStub, type CheckSuccess } from "./check";
 import { createIdentity, loadIdentity, type InitSuccess } from "./identity";
 import { resolveOrigin } from "./links";
 import { startMcpServer } from "./mcp";
-import { pullStub, type PullSuccess } from "./pull";
+import { envFileFor, pullStub, type PullSuccess } from "./pull";
 import { pushStub, type PushSuccess } from "./push";
 import { redact, redactDeep } from "./redact";
 import { EXIT_RUN_FAILED, runCommand } from "./run";
@@ -40,14 +40,16 @@ export interface Io {
 export const USAGE = `stubs: move one-time .env stubs into a project without printing the values.
 
 Usage:
-  stubs pull <link>|- [--to <file>] [--overwrite] [--allow-tracked] [--origin <url>] [--json]
+  stubs pull <link>|- [--to <file>] [--env <name>] [--overwrite] [--allow-tracked] [--origin <url>] [--json]
       Open the stub and merge its values into <file> (default .env.local).
+      --env <name> uses .env.<name> instead. Cannot be combined with --to.
       Keys already in the file are skipped unless --overwrite. Prints key names only.
       Refuses (exit 5) if git would not ignore the file, unless --allow-tracked.
       With -, the link is read from stdin (pbpaste | stubs pull -), so it never sits in
       the process list or your shell history.
 
-  stubs run [--from <file>]... -- <cmd> [args...]
+  stubs run [--from <file>]... [--env <name>] -- <cmd> [args...]
+      --env <name> uses .env.<name> instead. Cannot be combined with --from.
       Run <cmd> with the values from <file> (default .env.local) in its environment, and
       replace every one of those values in its output with [stubs:KEY]. Values shorter than
       6 characters (true, 3000) aren't masked. There's no flag to show the values; open the
@@ -58,8 +60,9 @@ Usage:
   stubs check <link>|- [--origin <url>] [--json]
       Say whether the stub is still sealed, without opening it.
 
-  stubs push [file|--prompt] [--ttl 5m|1h|1d|7d] [--to <id>] [--origin <url>] [--json]
+  stubs push [file|--prompt] [--env <name>] [--ttl 5m|1h|1d|7d] [--to <id>] [--origin <url>] [--json]
       Seal <file> (default .env.local, "-" for stdin) into a new stub and print its link.
+      --env <name> uses .env.<name> instead. Cannot be combined with a file, "-", or --prompt.
       --prompt reads hidden multiline .env input in your terminal. Ctrl-D finishes;
       Ctrl-C cancels. Cannot be combined with a file or "-".
       With --to, the stub is locked: only the machine holding that stubs id can open it.
@@ -122,9 +125,9 @@ const COMMON: Options = {
 };
 
 const COMMANDS: Record<string, Options> = {
-  pull: { ...COMMON, to: { type: "string" }, overwrite: { type: "boolean" }, "allow-tracked": { type: "boolean" } },
+  pull: { ...COMMON, env: { type: "string" }, to: { type: "string" }, overwrite: { type: "boolean" }, "allow-tracked": { type: "boolean" } },
   check: COMMON,
-  push: { ...COMMON, ttl: { type: "string" }, to: { type: "string" }, prompt: { type: "boolean" } },
+  push: { ...COMMON, env: { type: "string" }, ttl: { type: "string" }, to: { type: "string" }, prompt: { type: "boolean" } },
   init: { json: COMMON.json!, help: COMMON.help!, force: { type: "boolean" } },
   id: { json: COMMON.json!, help: COMMON.help! },
   mcp: { help: COMMON.help! },
@@ -138,7 +141,7 @@ const COMMANDS: Record<string, Options> = {
   // Not --env-file: Node reads that flag itself, anywhere on the command line before --, and
   // would load the file into this process before any of this code runs. The launcher in
   // dist/stubs.js puts a -- in front of the script so a typo can't do that either.
-  run: { help: COMMON.help!, from: { type: "string", multiple: true } },
+  run: { help: COMMON.help!, env: { type: "string" }, from: { type: "string", multiple: true } },
 };
 
 /** Flags a parse error may name back; anything else is "an unknown flag", since it could be a link. */
@@ -207,10 +210,29 @@ export async function run(argv: string[], io: Io): Promise<number> {
   }
   const json = values.json === true;
 
+  let envFile: string | undefined;
+  const envName = stringValue(values.env);
+  if (envName !== undefined) {
+    const mapped = envFileFor(envName);
+    if (isFailure(mapped)) {
+      const code = report(fail("invalid", `${mapped.message} Run \`stubs ${command} --help\`.`), json, out);
+      return command === "run" ? EXIT_RUN_FAILED : code;
+    }
+    const conflict = command === "pull" && values.to !== undefined ? "--to"
+      : command === "run" && values.from !== undefined ? "--from"
+      : command === "push" && (positionals.length > 0 || values.prompt === true) ? 'a file, "-", or --prompt'
+      : undefined;
+    if (conflict) {
+      const code = report(fail("invalid", `--env cannot be combined with ${conflict}. Run \`stubs ${command} --help\`.`), json, out);
+      return command === "run" ? EXIT_RUN_FAILED : code;
+    }
+    envFile = mapped;
+  }
+
   if (command === "run") {
-    const envFiles = Array.isArray(values.from) ? values.from.map(String) : undefined;
+    const envFiles = envFile !== undefined ? [envFile] : Array.isArray(values.from) ? values.from.map(String) : undefined;
     const result = await runCommand(
-      { command: positionals, envFiles },
+      { command: positionals, envFiles, envFileFlag: envFile !== undefined ? "--env" : undefined },
       { cwd: io.cwd, env: io.env, ...io.run, warn: (message) => out.stderr(`stubs: ${message}\n`) },
     );
     if (typeof result === "number") return result;
@@ -244,7 +266,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
     if (positionals.length > 1) return report(fail("invalid", "push takes at most one file."), json, out);
     const lockTo = stringValue(values.to);
     const result = await pushStub(
-      { origin, file: positionals[0], prompt: values.prompt === true, ttl: stringValue(values.ttl), lockTo },
+      { origin, file: envFile ?? positionals[0], prompt: values.prompt === true, ttl: stringValue(values.ttl), lockTo },
       { transport, cwd: io.cwd, readStdin: io.readStdin, readPrompt: io.readPrompt },
     );
     const code = report(result, json, out);
@@ -269,7 +291,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
     {
       link,
       origin,
-      to: stringValue(values.to),
+      to: envFile ?? stringValue(values.to),
       overwrite: values.overwrite === true,
       allowTracked: values["allow-tracked"] === true,
     },

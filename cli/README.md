@@ -46,6 +46,8 @@ for older Unix systems and Windows.
 
 Opens the stub once and merges values into `.env.local`, printing key names only.
 Existing keys are skipped; use `--overwrite` to replace them or `--to <file>` for another file.
+Use `--env <name>` for `.env.<name>`: `--env prod` writes `.env.prod`. Names are used as typed
+(letters, digits, `.`, `_`, `-`). It can't be combined with `--to`.
 
 ```bash
 pbpaste | stubs pull -
@@ -58,6 +60,7 @@ The target must be ignored by git unless you pass `--allow-tracked`.
 
 Runs a command with the env file's values and replaces recognised values in stdout
 and stderr with `[stubs:KEY]`. Use `--from <file>` to read another file; it can be repeated.
+Use `--env <name>` for `.env.<name>`. It can't be combined with `--from`.
 
 ```bash
 stubs run -- pnpm test
@@ -78,6 +81,7 @@ stubs check 'https://stubs.talix.app/t#v1.…' --json
 ### `stubs push [file|--prompt]`
 
 Encrypts a file and prints a new link; the default file is `.env.local`, and `-` reads stdin.
+Use `--env <name>` for `.env.<name>`. It can't be combined with a file, `-`, or `--prompt`.
 Use `--ttl 5m|1h|1d|7d` to change the default hour, or `--to <stubs id>` to lock it to a recipient.
 
 ```bash

@@ -21,10 +21,15 @@ link out of the process list and your shell history.
 | Flag | What it does |
 |---|---|
 | `--to <file>` | File to write. Default `.env.local`, relative to the current directory. |
+| `--env <name>` | Write `.env.<name>` in the current directory. Cannot be combined with `--to`. |
 | `--overwrite` | Replace keys that already exist in the file. Without it, existing keys are skipped and reported. |
 | `--allow-tracked` | Write even if git would track the file. |
 | `--origin <url>` | Trust a server other than `https://stubs.talix.app`. Same as `STUBS_ORIGIN`. |
 | `--json` | Print one JSON object instead of text. |
+
+Names are literal: `--env prod` uses `.env.prod`, and `--env production.local` uses
+`.env.production.local`. Names must contain only letters, digits, `.`, `_`, or `-` and cannot
+be empty. Invalid names or combining `--env` with `--to` exit `3` before any network call.
 
 ```
 $ stubs pull 'https://stubs.talix.app/t#v1.…'
@@ -91,6 +96,10 @@ $ stubs run -- pnpm test
 | Flag | What it does |
 |---|---|
 | `--from <file>` | Read this file instead of `.env.local`. Repeat it to read several. |
+| `--env <name>` | Read `.env.<name>` in the current directory. Cannot be combined with `--from`. |
+
+Names follow the same literal rules as `pull`. Invalid names or combining `--env` with
+`--from` exit `125` before the command starts. Errors name the flag rather than the user path.
 
 There is no flag that shows the values. If you want to see them, open the file yourself.
 
@@ -110,7 +119,7 @@ with your whole command line before stubs starts, while still showing npm's real
 errors. Plain npx without that early `--` is unprotected: it can load the
 file and run its hooks before our launcher starts. Raw `node dist/stubs.js` is also
 unprotected because it skips the shebang. Windows npm shims invoke `node --` directly, so
-`sh` is not required. Stubs reads the env file itself through `--from`.
+`sh` is not required. Stubs reads the env file itself through `--from` or `--env`.
 
 #### Process behavior
 
@@ -227,10 +236,14 @@ Encrypts a file on your machine and prints a new link. `file` defaults to `.env.
 | Flag | What it does |
 |---|---|
 | `--prompt` | Enter or paste multiline `.env` text with terminal echo disabled. Ctrl-D finishes; Ctrl-C cancels. |
+| `--env <name>` | Read `.env.<name>` in the current directory. Cannot be combined with a file, `-`, or `--prompt`. |
 | `--ttl 5m\|1h\|1d\|7d` | How long the link stays valid. Default `1h`. |
 | `--to <stubs id>` | Lock the stub to one machine: only the holder of that identity can open it. |
 | `--origin <url>` | As for `pull`. |
 | `--json` | Print `{"ok":true,"link":"…","expiresAt":<ms>}` (plus `"locked":true` when locked) instead of the bare link. |
+
+Names follow the same literal rules as `pull`. Invalid names or combining `--env` with
+a file, `-`, or `--prompt` exit `3` before reading input or sending anything.
 
 An unlocked link is the only way to open the stub, so treat it like the values themselves. A
 locked link is safe to leave in a chat: without the recipient's identity it opens nothing.

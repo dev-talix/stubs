@@ -1,4 +1,4 @@
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Writable } from "node:stream";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -37,6 +37,58 @@ const deps = (over: Partial<RunDeps> = {}): RunDeps => ({ cwd, env: {}, stdout: 
 const WRITE_PID = `require("node:fs").writeFileSync("pid", String(process.pid));`;
 
 describe("stubs run", () => {
+  it("reads --env test and keeps masking the selected file's values", async () => {
+    await writeFile(join(cwd, ".env.test"), `TEST_KEY=${SECRET}\n`);
+    const result = await run(["--env", "test", "--", NODE, "-e", "console.log(process.env.TEST_KEY, process.env.API_KEY)"]);
+    expect(result).toEqual({ code: 0, stdout: "[stubs:TEST_KEY] undefined\n", stderr: "" });
+  });
+
+  it("refuses --env with --from before running", async () => {
+    await writeFile(join(cwd, ".env.test"), "TEST_KEY=test-secret\n");
+    const result = await run(["--env", "test", "--from", ".env.local", "--", NODE, "-e", 'require("node:fs").writeFileSync("started", "yes")']);
+    expect(result).toEqual({
+      code: 125, stdout: "",
+      stderr: "stubs: --env cannot be combined with --from. Run `stubs run --help`.\n",
+    });
+    expect(await readdir(cwd)).toEqual([".env.local", ".env.test"]);
+  });
+
+  it.each(["../x", "a/b", "", "a\\b", "two words", "pasted-secret\n"])(
+    "refuses invalid --env %j without echoing it or running", async (name) => {
+      const result = await run(["--env", name, "--", NODE, "-e", 'require("node:fs").writeFileSync("started", "yes")']);
+      expect(result).toEqual({
+        code: 125, stdout: "",
+        stderr: "stubs: --env takes a name like production or staging (letters, digits, '.', '_', '-'). Run `stubs run --help`.\n",
+      });
+      if (name !== "") expect(result.stdout + result.stderr).not.toContain(name);
+      expect(await readdir(cwd)).toEqual([".env.local"]);
+    },
+  );
+
+  it("labels a missing --env file without printing the environment name", async () => {
+    const result = await run(["--env", SECRET, "--", NODE, "-e", "console.log('ran')"]);
+    expect(result).toEqual({
+      code: 125, stdout: "",
+      stderr: "stubs: The --env file doesn't exist. Pull a stub first, or check --env.\n",
+    });
+    expect(result.stderr).not.toContain(SECRET);
+  });
+
+  it("labels a --env folder without printing its path", async () => {
+    await mkdir(join(cwd, ".env.test"));
+    const result = await run(["--env", "test", "--", NODE, "-e", "console.log('ran')"]);
+    expect(result).toEqual({ code: 125, stdout: "", stderr: "stubs: The --env file is a folder, not a file.\n" });
+  });
+
+  it("keeps refused-key checks for --env files", async () => {
+    await writeFile(join(cwd, ".env.test"), `NODE_OPTIONS=${SECRET}\n`);
+    const result = await run(["--env", "test", "--", NODE, "-e", 'require("node:fs").writeFileSync("started", "yes")']);
+    expect(result.code).toBe(125);
+    expect(result.stderr).toContain("NODE_OPTIONS can't come from an env file");
+    expect(result.stderr).not.toContain(SECRET);
+    expect(await readdir(cwd)).toEqual([".env.local", ".env.test"]);
+  });
+
   it("passes the values to the command and masks them in both streams", async () => {
     const result = await node(`
       console.log("key", process.env.API_KEY, "url", process.env.DB_URL, "port", process.env.PORT);

@@ -27,7 +27,21 @@ keeping the values out of its reach altogether is TAL-142.
 
 All commands read the link from an argument. A link is `https://<origin>/t#<fragment>`.
 
-### R1 `stubs pull <link> [--to <file>] [--overwrite] [--allow-tracked] [--origin <url>] [--json]`
+### Environment file selection
+
+`pull`, `run`, and `push` take `--env <name>` to select `.env.<name>` in the current directory.
+Names are literal, nonempty, and contain only `A-Z`, `a-z`, digits, `.`, `_`, or `-`. `prod`
+uses `.env.prod`; `production.local` uses `.env.production.local`. No aliases apply.
+
+`envFileFor` in [`cli/src/pull.ts`](../cli/src/pull.ts) maps and validates the name before any
+network call or input read. `pull --env` with `--to`, `run --env` with `--from`, and
+`push --env` with a file, `-`, or `--prompt` are refused. Invalid names and conflicts exit `3`
+(`125` for run) without echoing the name, and nothing is consumed or sent. The selected path
+then goes through the same git guard, symlink handling, refused-key checks, and masking as any
+other file. Run's file errors say "The --env file" rather than printing the path. MCP keeps its
+existing `file` parameter.
+
+### R1 `stubs pull <link> [--to <file>] [--env <name>] [--overwrite] [--allow-tracked] [--origin <url>] [--json]`
 
 1. Parse the link. Origin must equal `https://stubs.talix.app` unless `--origin` (or
    `STUBS_ORIGIN`) says otherwise. A different origin exits `3` without any network call.
@@ -84,7 +98,7 @@ Status only; never consumes. Human: `Sealed. Valid until <local time>.` or `Void
 expired).` JSON: `{"ok":true,"status":"sealed","expiresAt":<ms>}` or `{"ok":true,"status":"void"}`.
 A void stub exits `2` (the JSON still says `ok: true`), so scripts can branch on the exit code.
 
-### R3 `stubs push [file] [--ttl 5m|1h|1d|7d] [--origin <url>] [--json]`
+### R3 `stubs push [file] [--env <name>] [--ttl 5m|1h|1d|7d] [--origin <url>] [--json]`
 
 Reads `file` (default `.env.local`, or stdin when `file` is `-`), creates a stub through
 `issueTicket`, prints the link (human) or `{"ok":true,"link":"...","expiresAt":<ms>}`. Refuses
@@ -312,7 +326,7 @@ and `exitCode: 130`.
 - Error messages name keys and paths only. Malformed lines in an env file are reported by line
   number, never by content, since the content may hold part of a value.
 
-### R12 `stubs run [--from <file>]... -- <cmd> [args...]`
+### R12 `stubs run [--from <file>]... [--env <name>] -- <cmd> [args...]`
 
 After a pull, the agent runs tests, dev servers, and scripts. Many tools print their config or
 environment on error, so the pulled values would land in the transcript anyway (TAL-141).

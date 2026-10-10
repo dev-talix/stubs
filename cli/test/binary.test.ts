@@ -704,7 +704,8 @@ describe("stubs binary", () => {
 
   it("bundles every dependency, so the pinned version is the whole supply chain", async () => {
     const bundle = await readFile(BIN, "utf8");
-    const specifiers = [...bundle.matchAll(/\b(?:from|import)\s*\(?\s*"([^"]+)"/g)].map((m) => m[1]!);
+    // Not after "--": a flag string like "--from" isn't an import.
+    const specifiers = [...bundle.matchAll(/(?<!--)\b(?:from|import)\s*\(?\s*"([^"]+)"/g)].map((m) => m[1]!);
     expect(specifiers.length).toBeGreaterThan(0);
     expect(specifiers.filter((s) => !s.startsWith("node:"))).toEqual([]);
     const pkg = JSON.parse(await readFile(join(ROOT, "cli/package.json"), "utf8"));

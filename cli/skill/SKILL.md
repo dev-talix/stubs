@@ -38,6 +38,7 @@ npx -y --loglevel=warn -- @talix/stubs@{{VERSION}} pull '<link>' --json
 ```
 
 - Add `--to <file>` only if the user names a different env file (the default is `.env.local`).
+  If the user names an environment, such as production or staging, use `--env <name>` instead.
 - Run it **once**. The stub is used up the moment it opens; a second run reports it void.
 - Use the pinned version above exactly. Don't drop the `@{{VERSION}}`, and don't substitute
   `@latest`.
@@ -80,8 +81,9 @@ npx -y --loglevel=warn -- @talix/stubs@{{VERSION}} run -- pnpm dev
 - The exit code is the command's own. 125 means stubs itself failed (its message says why),
   126 that the command isn't executable, 127 that it wasn't found.
 - `--from <file>` reads another file; the default is `.env.local`. Use it only when the user
-  named a different file at pull time. Never write `--env-file`: Node reads that flag itself,
-  before stubs runs, and would load the file into stubs.
+  named a different file at pull time. If they named an environment, use `--env <name>` instead.
+  Never write `--env-file`: Node reads that flag itself, before stubs runs, and would load the
+  file into stubs.
 - Output shows `[stubs:DB_URL]` where the value would be. That's expected; don't try to
   recover the value. Values shorter than 6 characters (`true`, `3000`) are left as they are.
 - There is no flag that shows the values. If the user wants to see one, tell them to open the
