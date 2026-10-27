@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CreateFlow, assessDraft, type CreateState } from "../../src/client/create-flow";
+import { CreateFlow, assessDraft, isAcceptableRecipient, type CreateState } from "../../src/client/create-flow";
 import type { IssueOutcome } from "../../src/core/ticket";
 import { MAX_PLAINTEXT_BYTES } from "../../src/shared/protocol";
 
@@ -111,6 +111,14 @@ describe("CreateFlow", () => {
     await first;
     flow.reset();
     expect(states).toEqual(["printing", "printed", "editing"]);
+  });
+});
+
+describe("isAcceptableRecipient", () => {
+  it("accepts no recipient or a canonical id, and rejects an id with the right shape that isn't canonical", () => {
+    expect(isAcceptableRecipient("")).toBe(true);
+    expect(isAcceptableRecipient(RECIPIENT)).toBe(true);
+    expect(isAcceptableRecipient("stubs1" + "_".repeat(43))).toBe(false);
   });
 });
 

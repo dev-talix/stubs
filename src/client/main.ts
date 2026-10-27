@@ -1,7 +1,7 @@
 import "@fontsource/fragment-mono/400.css";
 import "./styles.css";
 import { readAcquisition, track } from "./analytics";
-import { copyText } from "./copy";
+import { copyText, selectText } from "./copy";
 import { renderCreate } from "./create";
 import { renderReveal } from "./reveal";
 import { issueTicket, type Transport } from "../core/ticket";
@@ -23,11 +23,17 @@ const transport: Transport = (path, init) => fetch(path, init);
 for (const button of document.querySelectorAll<HTMLButtonElement>("button[data-copy]")) {
   const source = document.getElementById(button.dataset.copy ?? "");
   if (!source) continue;
+  let timer: number | undefined;
   button.addEventListener("click", async () => {
-    if (!(await copyText(source.textContent ?? ""))) return;
+    if (!(await copyText(source.textContent ?? ""))) {
+      selectText(source);
+      announce("Copy blocked. The snippet is selected. Press Ctrl+C or Cmd+C.");
+      return;
+    }
     button.textContent = "COPIED";
     announce("Copied.");
-    setTimeout(() => (button.textContent = "COPY"), 1600);
+    window.clearTimeout(timer);
+    timer = window.setTimeout(() => (button.textContent = "COPY"), 1600);
   });
 }
 

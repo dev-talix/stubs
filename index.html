@@ -9,6 +9,7 @@
     <!-- share:start (the build swaps this block for the stub version in t.html) -->
     <title>Stubs · one-time .env links</title>
     <meta name="description" content="Share .env values through a link that opens once. Encrypted in your browser; the key never reaches the server." />
+    <link rel="canonical" href="https://stubs.talix.app/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Stubs" />
     <meta property="og:url" content="https://stubs.talix.app/" />
@@ -55,7 +56,7 @@
         <ol class="how">
           <li><span>01</span> Paste a .env. It's encrypted in your browser.</li>
           <li><span>02</span> The key goes in the link, after the #. Our server never sees it.</li>
-          <li><span>03</span> The first person to open the link gets the values. Then it's void.</li>
+          <li><span>03</span> Tearing the ticket uses it up. Opening the page alone doesn't.</li>
         </ol>
 
         <section class="agents" aria-labelledby="agents-title">
@@ -68,26 +69,31 @@
           <div class="snippet">
             <span class="snippet-label">Install the skill (Claude Code, Codex)</span>
             <pre><code id="snippet-skill">npx -y --loglevel=warn -- @talix/stubs@{{STUBS_CLI_VERSION}} skill install</code></pre>
-            <button type="button" class="copy" data-copy="snippet-skill">COPY</button>
+            <button type="button" class="copy" data-copy="snippet-skill" aria-label="Copy skill install command">COPY</button>
           </div>
           <div class="snippet">
             <span class="snippet-label">Pull a stub</span>
             <pre><code id="snippet-pull">npx -y --loglevel=warn -- @talix/stubs@{{STUBS_CLI_VERSION}} pull &lt;link&gt;</code></pre>
-            <button type="button" class="copy" data-copy="snippet-pull">COPY</button>
+            <button type="button" class="copy" data-copy="snippet-pull" aria-label="Copy pull command">COPY</button>
           </div>
           <div class="snippet">
             <span class="snippet-label">MCP server for Claude Code</span>
             <pre><code id="snippet-mcp">claude mcp add stubs -- npx -y @talix/stubs@{{STUBS_CLI_VERSION}} mcp</code></pre>
-            <button type="button" class="copy" data-copy="snippet-mcp">COPY</button>
+            <button type="button" class="copy" data-copy="snippet-mcp" aria-label="Copy MCP server command">COPY</button>
           </div>
           <div class="snippet">
             <span class="snippet-label">Or add to AGENTS.md</span>
             <pre><code id="snippet-agents">When given a link on stubs.talix.app, run `npx -y --loglevel=warn -- @talix/stubs@{{STUBS_CLI_VERSION}} pull &lt;link&gt;` (or the `pull_stub` tool). It writes the values into .env.local and prints only the key names. Never cat, read, or print .env* files.</code></pre>
-            <button type="button" class="copy" data-copy="snippet-agents">COPY</button>
+            <button type="button" class="copy" data-copy="snippet-agents" aria-label="Copy AGENTS.md snippet">COPY</button>
+          </div>
+          <p>To lock a stub to one recipient, have them run the command below once and send you the id it prints.</p>
+          <div class="snippet">
+            <span class="snippet-label">Recipient: get a stubs id</span>
+            <pre><code id="snippet-init">npx -y --loglevel=warn -- @talix/stubs@{{STUBS_CLI_VERSION}} init</code></pre>
+            <button type="button" class="copy" data-copy="snippet-init" aria-label="Copy init command">COPY</button>
           </div>
           <p>
-            To lock a stub to one machine, the recipient runs
-            <code>npx -y --loglevel=warn -- @talix/stubs@{{STUBS_CLI_VERSION}} init</code> once and shares the id it prints. Full docs:
+            Full docs:
             <a href="https://www.npmjs.com/package/@talix/stubs">npmjs.com/package/@talix/stubs</a>.
           </p>
         </section>

@@ -2,7 +2,7 @@
 // be in flight at a time, and what gets printed is the text as it was when submitted.
 
 import { pairsOf, parseDotenv, type EnvLine } from "../core/dotenv";
-import { PUBLIC_ID_PATTERN } from "../core/lock";
+import { parsePublicId } from "../core/lock";
 import type { IssueOutcome } from "../core/ticket";
 import { MAX_PLAINTEXT_BYTES, type TtlSeconds } from "../shared/protocol";
 
@@ -44,7 +44,7 @@ export type Issue = (text: string, ttlSeconds: TtlSeconds, lockTo: string) => Pr
 
 /** Empty is fine (not locked); anything else must be a full public id. */
 export function isAcceptableRecipient(lockTo: string): boolean {
-  return lockTo === "" || PUBLIC_ID_PATTERN.test(lockTo);
+  return lockTo === "" || parsePublicId(lockTo) !== null;
 }
 
 export class CreateFlow {

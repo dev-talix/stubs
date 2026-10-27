@@ -15,6 +15,12 @@
     <meta property="og:title" content="Security · Stubs" />
     <meta property="og:description" content="How Stubs encrypts .env values, what the server stores and for how long, and what it doesn't protect against." />
     <meta property="og:image" content="https://stubs.talix.app/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="A Stubs ticket reading ADMIT ONE, with three masked .env values" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Security · Stubs" />
+    <meta name="twitter:description" content="How Stubs encrypts .env values, what the server stores and for how long, and what it doesn't protect against." />
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
@@ -132,8 +138,8 @@
             <hr class="rule" />
 
             <section aria-labelledby="lock">
-              <h2 id="lock">Locking a stub to one machine</h2>
-              <p>An ordinary link works for anyone who has it. A locked link opens on one machine only.</p>
+              <h2 id="lock">Locking a stub to one recipient</h2>
+              <p>An ordinary link works for anyone who has it. A locked link opens only with the recipient's private key.</p>
               <ul>
                 <li>
                   The recipient runs <code>npx -y --loglevel=warn -- @talix/stubs@{{STUBS_CLI_VERSION}} init</code>
@@ -241,7 +247,7 @@
                   through the rate-limited server
                 </li>
                 <li>altered ciphertext fails to decrypt instead of producing wrong values</li>
-                <li>a locked link is useless to anyone but the recipient's machine</li>
+                <li>a locked link is useless to anyone without the recipient's private key</li>
               </ul>
             </section>
 
@@ -261,7 +267,7 @@
                 <li>
                   A leaked unlocked link. Until it's opened, an unlocked link is a bearer token:
                   anyone who has it can open it first, wherever it was sent and in the recipient's
-                  browser history. Lock the stub to the recipient's machine to close this.
+                  browser history. Lock the stub to the recipient to close this.
                 </li>
                 <li>
                   Tools that print their environment. A tool that prints its environment on error
