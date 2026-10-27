@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { captureTicket, forgetTicket, type TicketBrowser } from "../../src/client/ticket-session";
 
 const FRAGMENT = `#v1.${"k".repeat(43)}`;
+const LOCKED_FRAGMENT = `#v2.${"e".repeat(43)}.${"w".repeat(80)}`;
 
 function fakeBrowser(hash: string, options: { storageThrows?: boolean } = {}) {
   const storage = new Map<string, string>();
@@ -49,6 +50,38 @@ describe("captureTicket", () => {
     expect(captureTicket(browser).kind).toBe("malformed");
     expect(storage.size).toBe(0);
     expect(urls).toEqual(["/t"]);
+  });
+
+  it("keeps a locked link through refresh until it's forgotten", () => {
+    const { browser, urls } = fakeBrowser(LOCKED_FRAGMENT);
+    const reading = captureTicket(browser);
+    expect(reading.kind).toBe("locked");
+    expect(urls).toEqual(["/t"]);
+    browser.location.hash = "";
+    expect(captureTicket(browser)).toEqual(reading);
+
+    forgetTicket(browser);
+    expect(captureTicket(browser).kind).toBe("missing");
+  });
+
+  it("restores a new locked link instead of an older stored ticket", () => {
+    const { browser } = fakeBrowser(FRAGMENT);
+    captureTicket(browser);
+    browser.location.hash = LOCKED_FRAGMENT;
+    const reading = captureTicket(browser);
+    expect(reading.kind).toBe("locked");
+    browser.location.hash = "";
+    expect(captureTicket(browser)).toEqual(reading);
+  });
+
+  it.each(["#v1.short", "#v99.unknown"])("clears an older stored ticket on %s", (fragment) => {
+    const { browser, storage } = fakeBrowser(FRAGMENT);
+    captureTicket(browser);
+    browser.location.hash = fragment;
+    expect(captureTicket(browser).kind).not.toBe("ticket");
+    expect(storage.size).toBe(0);
+    browser.location.hash = "";
+    expect(captureTicket(browser).kind).toBe("missing");
   });
 
   it("prefers a new link over a ticket stored earlier in the tab", () => {

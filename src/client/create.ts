@@ -21,6 +21,7 @@ import {
 } from "../shared/protocol";
 
 const LIMIT = formatKilobytes(MAX_PLAINTEXT_BYTES);
+const MAX_PREVIEW_ROWS = 50;
 
 export function agentInstructions(link: string): string {
   return (
@@ -37,25 +38,42 @@ const TTL_LABELS: Record<TtlSeconds, string> = {
 };
 
 const PLACEHOLDER = [
-  "DATABASE_URL=postgres://app:hunter2@db.internal:5432/app",
-  "STRIPE_SECRET_KEY=sk_live_51H...",
-  "# comments and blank lines are fine",
+  "DB_URL=postgres://…",
+  "STRIPE_KEY=sk_live_…",
+  "# comments are fine",
 ].join("\n");
 
+// A stubs id is "stubs1" followed by 43 characters.
+const PUBLIC_ID_LENGTH = 49;
+
 const LOCK_HINT =
-  `Their stubs id, from \`${NPX_STUBS} id\`. ` +
-  "A locked stub opens only on their machine, so the link is safe to share anywhere.";
+  "Their stubs id comes from init in the Stubs CLI, shown below. " +
+  "Opening a locked stub requires the recipient's private key.";
+
+/** Why the lock field can't be used yet, or "" when it can. A short id is flagged only after the field loses focus. */
+function lockProblem(value: string, blurred: boolean): string {
+  if (value === "") return "";
+  if (value.length < PUBLIC_ID_LENGTH) {
+    return blurred ? "Stubs ids are 49 characters. This one looks cut short." : "";
+  }
+  return isAcceptableRecipient(value) ? "" : "Not a valid stubs id. Check it for typos, or ask for a fresh copy.";
+}
 
 const FAILURE_COPY: Record<FailureReason, string> = {
   empty: "There's nothing to print yet.",
   too_large: `Too long to print. The limit is ${LIMIT}.`,
-  bad_recipient: "That stubs id can't receive a locked stub. Ask the recipient to run `stubs id` again.",
+  bad_recipient: "That stubs id can't receive a locked stub. Ask the recipient to run init in the Stubs CLI and send the id again.",
   rate_limited: "Printer jammed: too many tickets in the last minute. Try again shortly.",
   network: "Couldn't reach the printer. Check your connection and try again.",
   server: "Something went wrong printing that ticket. Try again.",
 };
 
-export function renderCreate(receipt: HTMLElement, announce: Announce, issue: Issue) {
+export function renderCreate(
+  receipt: HTMLElement,
+  announce: Announce,
+  issue: Issue,
+  { focusInput = false }: { focusInput?: boolean } = {},
+) {
   const input = h("textarea", {
     id: "env-input",
     class: "env-input",
@@ -105,7 +123,7 @@ export function renderCreate(receipt: HTMLElement, announce: Announce, issue: Is
     input,
   );
 
-  // Optional: lock the stub to one machine. Its owner runs `stubs id` and sends the result.
+  // Optional: lock the stub to one recipient. They run `stubs id` and send the result.
   const lockInput = h("input", {
     id: "lock-input",
     class: "lock-input",
@@ -130,6 +148,8 @@ export function renderCreate(receipt: HTMLElement, announce: Announce, issue: Is
     lockHint,
   );
   const recipient = () => lockInput.value.trim();
+  // Set when the lock field loses focus, and cleared by the next edit, so typing stays quiet.
+  let lockBlurred = false;
   void supportsLocking().then((supported) => {
     if (supported) return;
     lockInput.disabled = true;
@@ -142,7 +162,7 @@ export function renderCreate(receipt: HTMLElement, announce: Announce, issue: Is
     if (state.kind === "printed") {
       renderTicket(receipt, announce, state, () => {
         flow.reset();
-        renderCreate(receipt, announce, issue);
+        renderCreate(receipt, announce, issue, { focusInput: true });
       });
       return;
     }
@@ -156,7 +176,7 @@ export function renderCreate(receipt: HTMLElement, announce: Announce, issue: Is
     items.replaceChildren(
       ...(draft.lines.length === 0
         ? [h("li", { class: "empty" }, "Nothing to print yet.")]
-        : draft.lines.map((line) =>
+        : draft.lines.slice(0, MAX_PREVIEW_ROWS).map((line) =>
             h(
               "li",
               { class: "item" },
@@ -164,25 +184,49 @@ export function renderCreate(receipt: HTMLElement, announce: Announce, issue: Is
               h("span", { class: "leader", "aria-hidden": "true" }),
               h(
                 "span",
-                { class: "mask" },
+                { class: "mask", "aria-hidden": "true" },
                 line.kind === "invalid" ? "TEXT" : line.value === "" ? "EMPTY" : "••••••••",
+              ),
+              h(
+                "span",
+                { class: "sr-only" },
+                " ",
+                line.kind === "invalid" ? "not a key/value line" : line.value === "" ? "empty" : "hidden",
               ),
             ),
           )),
     );
+    if (draft.lines.length > MAX_PREVIEW_ROWS) {
+      items.append(h("li", { class: "item" }, `+ ${draft.lines.length - MAX_PREVIEW_ROWS} more lines`));
+    }
 
-    const badRecipient = !isAcceptableRecipient(recipient());
-    lock.classList.toggle("invalid", badRecipient);
-    lockHint.textContent = badRecipient ? "Not a stubs id. It starts with stubs1 and is 49 characters long." : LOCK_HINT;
+    const problem = lockProblem(recipient(), lockBlurred);
+    lock.classList.toggle("invalid", problem !== "");
+    if (problem) lockInput.setAttribute("aria-invalid", "true");
+    else lockInput.removeAttribute("aria-invalid");
+    // A disabled lock field keeps its "can't lock in this browser" note.
+    if (!lockInput.disabled) lockHint.textContent = problem ? `${problem} ${LOCK_HINT}` : LOCK_HINT;
 
     // While printing, the text is frozen: what's on screen is what gets printed.
     input.readOnly = printing;
     lockInput.readOnly = printing;
     print.disabled = !flow.canSubmit(input.value, recipient());
     print.textContent = printing ? "PRINTING…" : "PRINT TICKET";
-    error.textContent = state.kind === "failed" ? FAILURE_COPY[state.reason] : "";
+    const message =
+      draft.overLimit ? FAILURE_COPY.too_large : state.kind === "failed" ? FAILURE_COPY[state.reason] : "";
+    // Rewriting the same text would make screen readers announce the alert on every keystroke.
+    if (error.textContent !== message) error.textContent = message;
   }
 
+  lockInput.addEventListener("input", () => {
+    lockBlurred = false;
+  });
+  lockInput.addEventListener("blur", () => {
+    lockBlurred = true;
+    render(flow.state);
+    const problem = lockProblem(recipient(), true);
+    if (problem) announce(problem);
+  });
   for (const control of [input, lockInput]) {
     control.addEventListener("input", () => {
       flow.edited();
@@ -215,6 +259,7 @@ export function renderCreate(receipt: HTMLElement, announce: Announce, issue: Is
         ],
       ],
       feed: true,
+      focus: focusInput ? input : undefined,
     },
     announce,
   );
@@ -281,16 +326,16 @@ function renderTicket(
     ? formatLines(ticket.lineCount)
     : `${ticket.pairCount} ${ticket.pairCount === 1 ? "ITEM" : "ITEMS"}`;
   const facts = `${items} · VALID UNTIL ${formatStamp(ticket.expiresAt)}${ticket.locked ? " · LOCKED" : ""}`;
+  const leaveWarning = "Copy it now; it's gone when you leave this page.";
   const sendHint = ticket.locked
-    ? `Locked: only the recipient's machine can open it, with ${NPX_STUBS} pull. ` +
-      "The link alone is harmless, so share it anywhere."
-    : "Opens once, then it's void. Copy it now; it's gone when you leave this page.";
+    ? `Locked: only the recipient's private key opens it, with the Stubs CLI. ${leaveWarning}`
+    : `Opens once, then it's void. ${leaveWarning}`;
   showReceipt(
     receipt,
     {
       sections: [
         [
-          h("p", { class: "admit" }, "ADMIT ONE"),
+          h("h2", { class: "admit" }, "ADMIT ONE"),
           h("p", { class: "ticket-facts" }, facts),
         ],
         [

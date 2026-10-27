@@ -16,6 +16,8 @@ export interface ReceiptScreen {
   /** Spoken to screen reader users once the screen is up. */
   message?: string;
   focus?: HTMLElement;
+  /** Focus the new section heading after a user action replaces the screen. */
+  focusHeading?: boolean;
 }
 
 export function showReceipt(receipt: HTMLElement, screen: ReceiptScreen, announce: Announce) {
@@ -25,7 +27,7 @@ export function showReceipt(receipt: HTMLElement, screen: ReceiptScreen, announc
   const head = h(
     "header",
     { class: "receipt-head" },
-    h("p", { class: "brand" }, "STUBS"),
+    h("h1", { class: "brand" }, "STUBS"),
     h(
       "p",
       { class: "receipt-meta" },
@@ -50,7 +52,13 @@ export function showReceipt(receipt: HTMLElement, screen: ReceiptScreen, announc
     receipt.classList.add("is-feeding");
   }
   if (screen.message) announce(screen.message);
-  screen.focus?.focus();
+  if (screen.focusHeading) {
+    const heading = receipt.querySelector<HTMLElement>("h2") ?? receipt.querySelector<HTMLElement>("h1");
+    heading?.setAttribute("tabindex", "-1");
+    heading?.focus();
+  } else {
+    screen.focus?.focus();
+  }
 }
 
 export function perforation(label: string): HTMLElement {

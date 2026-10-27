@@ -11,6 +11,17 @@ export async function copyText(text: string): Promise<boolean> {
   }
 }
 
+/** Select visible text for manual copying when clipboard access is blocked. */
+export function selectText(element: HTMLElement) {
+  element.setAttribute("tabindex", "-1");
+  element.focus();
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}
+
 interface CopyButtonOptions {
   label: string;
   className: string;

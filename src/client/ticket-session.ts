@@ -25,15 +25,18 @@ export function captureTicket(browser: TicketBrowser = window): FragmentReading 
   if (fragment) browser.history.replaceState(null, "", "/t");
 
   const fromLink = parseTicketFragment(fragment);
-  if (fromLink.kind === "ticket") {
+  if (fromLink.kind === "ticket" || fromLink.kind === "locked") {
     attempt(() => browser.sessionStorage.setItem(STORAGE_KEY, fragment.replace(/^#/, "")));
     return fromLink;
   }
-  if (fromLink.kind !== "missing") return fromLink;
+  if (fromLink.kind !== "missing") {
+    forgetTicket(browser);
+    return fromLink;
+  }
 
   const stored = attempt(() => browser.sessionStorage.getItem(STORAGE_KEY)) ?? "";
   const fromStorage = parseTicketFragment(stored);
-  if (fromStorage.kind === "ticket") return fromStorage;
+  if (fromStorage.kind === "ticket" || fromStorage.kind === "locked") return fromStorage;
   forgetTicket(browser);
   return { kind: "missing" };
 }

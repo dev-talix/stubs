@@ -23,7 +23,7 @@
   --pixel-m: 22px;
   --pixel-l: 44px;
   --body: 14px;
-  --small: 12px;
+  --small: 13px;
 
   --pad: 28px;
   --tooth: 9px;
@@ -213,7 +213,7 @@ body {
   padding: 12px 72px 12px 14px;
   border: 1px solid #3b3833;
   background: var(--machine);
-  font: 12px / 1.6 var(--mono);
+  font: var(--small) / 1.6 var(--mono);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -225,7 +225,7 @@ body {
 /* Wins over the paper-coloured .copy rule below by specificity. */
 .agents .copy {
   position: absolute;
-  top: 26px;
+  bottom: 8px;
   right: 8px;
   border-color: var(--desk-text);
   color: var(--paper);
@@ -264,8 +264,9 @@ body {
   }
 }
 
-.receipt p {
+.receipt :where(p, h1, h2) {
   margin: 0;
+  font-weight: inherit;
 }
 
 .receipt-head {
@@ -284,7 +285,7 @@ body {
   justify-content: space-between;
   gap: 4px 12px;
   white-space: nowrap;
-  margin-top: 14px !important;
+  margin-top: 14px;
   color: var(--ink-soft);
   font-size: var(--small);
   letter-spacing: 0.06em;
@@ -307,11 +308,13 @@ body {
 .field-head {
   display: flex;
   justify-content: space-between;
+  gap: 12px;
   margin-bottom: 10px;
 }
 
 .size {
   color: var(--ink-soft);
+  white-space: nowrap;
 }
 
 .size.over {
@@ -324,31 +327,33 @@ body {
   min-height: 168px;
   padding: 12px 14px;
   resize: vertical;
-  border: 1px solid #d3ccbd;
+  border: 1px solid var(--ink-soft);
   border-radius: 0;
   color: var(--ink);
   background: var(--paper-recess);
-  font: 13px / 1.6 var(--mono);
+  font: 16px / 1.6 var(--mono);
   tab-size: 2;
 }
 
 .env-input::placeholder {
-  color: #8b8679;
+  color: var(--ink-soft);
+  opacity: 1;
 }
 
 .lock-input {
   display: block;
   width: 100%;
   padding: 12px 14px;
-  border: 1px solid #d3ccbd;
+  border: 1px solid var(--ink-soft);
   border-radius: 0;
   color: var(--ink);
   background: var(--paper-recess);
-  font: 13px / 1.4 var(--mono);
+  font: 16px / 1.4 var(--mono);
 }
 
 .lock-input::placeholder {
-  color: #8b8679;
+  color: var(--ink-soft);
+  opacity: 1;
 }
 
 .lock-input:disabled {
@@ -365,7 +370,7 @@ body {
 }
 
 .lock .fine {
-  margin-top: 10px !important;
+  margin-top: 10px;
 }
 
 /* ---------- Item lines with dot leaders ---------- */
@@ -374,7 +379,7 @@ body {
   margin: 10px 0 0;
   padding: 0;
   list-style: none;
-  font-size: 13px;
+  font-size: var(--small);
 }
 
 .item {
@@ -431,7 +436,7 @@ body {
   align-items: center;
   gap: 8px;
   min-height: 32px;
-  font-size: 13px;
+  font-size: var(--small);
   cursor: pointer;
 }
 
@@ -449,7 +454,6 @@ body {
 
 .ttl-option input:checked + .box::before {
   content: "[x]";
-  font-weight: 700;
 }
 
 .ttl-option input:focus-visible + .box {
@@ -460,7 +464,7 @@ body {
 .totals {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 18px !important;
+  margin-bottom: 18px;
   font-size: var(--small);
   letter-spacing: 0.08em;
 }
@@ -528,7 +532,7 @@ body {
   border-radius: 0;
   color: var(--ink);
   background: none;
-  font: 11px / 1 var(--mono);
+  font: var(--small) / 1 var(--mono);
   letter-spacing: 0.1em;
   cursor: pointer;
 }
@@ -540,15 +544,15 @@ body {
 
 .error {
   color: var(--stamp);
-  font-size: 13px;
+  font-size: var(--small);
 }
 
 .error:not(:empty) {
-  margin-top: 12px !important;
+  margin-top: 12px;
 }
 
 .fine {
-  margin-top: 16px !important;
+  margin-top: 16px;
   color: var(--ink-soft);
   font-size: var(--small);
   line-height: 1.6;
@@ -584,14 +588,14 @@ body {
 }
 
 .ticket-facts {
-  margin-top: 12px !important;
+  margin-top: 12px;
   font-size: var(--small);
   letter-spacing: 0.08em;
   text-align: center;
 }
 
 .lede {
-  margin-top: 16px !important;
+  margin-top: 16px;
   font-size: var(--body);
 }
 
@@ -613,11 +617,11 @@ body {
   width: 100%;
   margin-bottom: 12px;
   padding: 14px;
-  border: 1px solid #d3ccbd;
+  border: 1px solid var(--ink-soft);
   border-radius: 0;
   color: var(--ink);
   background: var(--paper-recess);
-  font: 13px / 1.4 var(--mono);
+  font: 16px / 1.4 var(--mono);
   text-overflow: ellipsis;
 }
 
@@ -772,8 +776,7 @@ body {
 
 .secret .key {
   min-width: 0;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: var(--small);
   overflow-wrap: anywhere;
 }
 
@@ -785,7 +788,7 @@ body {
   border-left: 3px solid var(--ink);
   color: var(--ink);
   background: var(--paper-recess);
-  font: 13px / 1.55 var(--mono);
+  font: var(--small) / 1.55 var(--mono);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -856,6 +859,11 @@ body {
 @media (max-width: 520px) {
   :root {
     --pad: 20px;
+  }
+
+  /* Two per row, so the fourth option doesn't sit alone on its own line. */
+  .ttl-option {
+    flex: 0 0 calc(50% - 9px);
   }
 
   .desk {

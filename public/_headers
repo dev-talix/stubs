@@ -1,6 +1,6 @@
 # no-transform everywhere: the edge must not inject scripts (such as Cloudflare's Web Analytics
-# beacon) into pages, which can briefly hold a ticket key in the URL. Assets already default to
-# "public, max-age=0, must-revalidate", so this only adds no-transform.
+# beacon) into pages, which can briefly hold a ticket key in the URL. Other files default to
+# "public, max-age=0, must-revalidate"; hashed files under assets/ get their own rule below.
 /*
   Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
   Referrer-Policy: no-referrer
@@ -10,6 +10,11 @@
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
   Strict-Transport-Security: max-age=31536000
   Cache-Control: public, max-age=0, must-revalidate, no-transform
+
+# Vite names files under assets/ by content hash, so they can be cached for a year.
+/assets/*
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable, no-transform
 
 # Ticket pages are never cached. "!" drops the catch-all Cache-Control so the two don't merge.
 /t

@@ -1,4 +1,4 @@
-import { copyButton } from "./copy";
+import { copyButton, selectText } from "./copy";
 import { NPX_STUBS } from "../shared/stubs-cli";
 import { h } from "./dom";
 import { pairsOf, parseDotenv } from "../core/dotenv";
@@ -25,16 +25,17 @@ export async function renderReveal(
   receipt: HTMLElement,
   reading: Exclude<FragmentReading, { kind: "missing" }>,
   context: RevealContext,
+  focusHeading = false,
 ) {
   if (reading.kind === "malformed") {
     context.finish();
     return renderMessage(receipt, context, {
       title: "INCOMPLETE LINK",
       body: "The key after the # is cut short. Ask the sender for the whole link.",
-    });
+    }, focusHeading);
   }
   if (reading.kind === "locked") {
-    // Nothing is consumed and nothing can be: the key is wrapped to one machine's identity.
+    // Nothing is consumed and nothing can be: the key is wrapped to the recipient's identity key.
     return renderLocked(receipt, lockedTicketLink(location.origin, reading.locked), context);
   }
   if (reading.kind === "unsupported_version") {
@@ -42,26 +43,29 @@ export async function renderReveal(
     return renderMessage(receipt, context, {
       title: "CAN'T READ THIS",
       body: "This stub uses a format this page doesn't know. Ask the sender for a new one.",
-    });
+    }, focusHeading);
   }
 
   showReceipt(
     receipt,
-    { sections: [[h("p", { class: "checking", role: "status" }, "CHECKING TICKET…")]] },
+    {
+      sections: [[h("h2", { class: "checking", "aria-live": "polite" }, "CHECKING TICKET…")]],
+      focusHeading,
+    },
     context.announce,
   );
 
   const outcome = await inspectTicket(reading.capability, context.transport);
   switch (outcome.kind) {
     case "sealed":
-      return renderSealed(receipt, reading.capability, outcome.expiresAt, context);
+      return renderSealed(receipt, reading.capability, outcome.expiresAt, context, focusHeading);
     case "void":
-      return renderVoid(receipt, context);
+      return renderVoid(receipt, context, focusHeading);
     case "unsupported_browser":
       return renderMessage(receipt, context, {
         title: "CAN'T OPEN HERE",
         body: "This browser can't decrypt it. Try a current Chrome, Firefox, or Safari.",
-      });
+      }, focusHeading);
     case "failed":
       return renderMessage(receipt, context, {
         title: outcome.reason === "rate_limited" ? "SLOW DOWN" : "NO CONNECTION",
@@ -69,8 +73,8 @@ export async function renderReveal(
           outcome.reason === "rate_limited"
             ? "Too many tries from your network. Nothing was used. Wait a minute and try again."
             : "Couldn't reach the server. Nothing was used. Try again.",
-        retry: () => renderReveal(receipt, reading, context),
-      });
+        retry: () => renderReveal(receipt, reading, context, true),
+      }, focusHeading);
   }
 }
 
@@ -79,6 +83,7 @@ function renderSealed(
   capability: TicketCapability,
   expiresAt: number,
   context: RevealContext,
+  focusHeading = false,
 ) {
   const tear = h("button", { type: "button", class: "print" }, "TEAR TO REVEAL");
   const error = h("p", { class: "error", role: "alert" });
@@ -108,14 +113,14 @@ function renderSealed(
         await tearStub(receipt, stub);
         return renderOpened(receipt, outcome.plaintext, context);
       case "void":
-        return renderVoid(receipt, context);
+        return renderVoid(receipt, context, true);
       case "tampered":
         context.finish();
         return renderMessage(receipt, context, {
           title: "WON'T DECRYPT",
           body: "It opened, but the contents don't match this link. It's void now. Ask the sender for a new one.",
           stamped: true,
-        });
+        }, true);
       case "failed":
       case "uncertain":
         tear.disabled = false;
@@ -135,7 +140,7 @@ function renderSealed(
     {
       sections: [
         [
-          h("p", { class: "admit" }, "ADMIT ONE"),
+          h("h2", { class: "admit" }, "ADMIT ONE"),
           h("p", { class: "ticket-facts" }, `VALID UNTIL ${formatStamp(expiresAt)}`),
           h(
             "p",
@@ -145,6 +150,7 @@ function renderSealed(
         ],
       ],
       message: "Ticket found. It can be opened once.",
+      focusHeading,
     },
     context.announce,
   );
@@ -156,8 +162,9 @@ const PULL_COMMAND = `${NPX_STUBS} pull`;
 /** The CLI command for this exact ticket, with a copy button, so it can go straight to an agent. */
 function pullHint(link: string, announce: Announce, lead = "Pulling it into a project? ") {
   const command = `${PULL_COMMAND} ${link}`;
-  // The page already took the key out of the address bar; don't put it back on screen.
+  // Keep the key off screen unless manual copying is needed.
   const shown = `${PULL_COMMAND} <this link>`;
+  const text = h("code", {}, shown);
   return h(
     "p",
     { class: "fine" },
@@ -165,7 +172,7 @@ function pullHint(link: string, announce: Announce, lead = "Pulling it into a pr
     h(
       "span",
       { class: "command" },
-      h("code", {}, shown),
+      text,
       copyButton({
         label: "COPY",
         className: "copy",
@@ -173,6 +180,11 @@ function pullHint(link: string, announce: Announce, lead = "Pulling it into a pr
         text: () => command,
         announce,
         copiedMessage: "Command copied.",
+        onRefused: () => {
+          text.textContent = command;
+          selectText(text);
+          announce("Copy blocked. The command is selected. Press Ctrl+C or Cmd+C.");
+        },
       }),
     ),
   );
@@ -191,7 +203,7 @@ export function openedLabels(pairCount: number) {
 
 function renderOpened(receipt: HTMLElement, plaintext: string, context: RevealContext) {
   const { announce } = context;
-  // Ask before leaving the only copy, but only while this page is live: once it's hidden the
+  // Ask before leaving the revealed values, but only while this page is live: once it's hidden the
   // user has already left, and a restored copy must be able to redirect without a prompt.
   const leaving = new AbortController();
   window.addEventListener("beforeunload", (event) => event.preventDefault(), { signal: leaving.signal });
@@ -205,8 +217,9 @@ function renderOpened(receipt: HTMLElement, plaintext: string, context: RevealCo
   const list = h(
     "ol",
     { class: "secrets", "aria-label": "Environment variables" },
-    ...pairs.map((pair) =>
-      h(
+    ...pairs.map((pair) => {
+      const value = h("code", { class: "value" }, pair.value === "" ? "(empty)" : pair.value);
+      return h(
         "li",
         { class: "secret" },
         h(
@@ -220,19 +233,31 @@ function renderOpened(receipt: HTMLElement, plaintext: string, context: RevealCo
             text: () => pair.value,
             announce,
             copiedMessage: `${pair.key} copied.`,
+            onRefused: () => {
+              value.textContent = pair.value;
+              selectText(value);
+              announce("Copy blocked. The value is selected. Press Ctrl+C or Cmd+C.");
+            },
           }),
         ),
-        h("code", { class: "value" }, pair.value === "" ? "(empty)" : pair.value),
-      ),
-    ),
+        value,
+      );
+    }),
   );
 
+  const raw = h("pre", { class: "raw" }, plaintext);
+  const unroll = h("div", { class: "unroll" }, pairs.length > 0 ? list : raw);
   const copyAll = copyButton({
     label: labels.copy,
     className: "print",
     text: () => plaintext,
     announce,
     copiedMessage: labels.copied,
+    onRefused: () => {
+      unroll.replaceChildren(raw);
+      selectText(raw);
+      announce("Copy blocked. The text is selected. Press Ctrl+C or Cmd+C.");
+    },
   });
 
   const download = h("button", { type: "button", class: "text-button" }, labels.download);
@@ -248,15 +273,15 @@ function renderOpened(receipt: HTMLElement, plaintext: string, context: RevealCo
       stamped: true,
       sections: [
         [
-          h("p", { class: "ticket-facts" }, `OPENED ${formatStamp(Date.now())}`),
+          h("h2", { class: "ticket-facts" }, `OPENED ${formatStamp(Date.now())}`),
           h(
             "p",
             { class: "lede" },
-            "This is the only copy. The server deleted its own, and this page won't come back once you leave.",
+            "The server deleted its copy. Save what you need before leaving. This page won't come back.",
           ),
         ],
         [
-          h("div", { class: "unroll" }, pairs.length > 0 ? list : h("pre", { class: "raw" }, plaintext)),
+          unroll,
           pairs.length > 0 &&
             unreadable > 0 &&
             h(
@@ -277,7 +302,7 @@ function renderOpened(receipt: HTMLElement, plaintext: string, context: RevealCo
         [copyAll, download],
       ],
       message: labels.message,
-      focus: copyAll,
+      focusHeading: true,
     },
     announce,
   );
@@ -289,24 +314,24 @@ function renderLocked(receipt: HTMLElement, link: string, context: RevealContext
     {
       sections: [
         [
-          h("p", { class: "admit" }, "LOCKED STUB"),
+          h("h2", { class: "admit" }, "LOCKED STUB"),
           h(
             "p",
             { class: "lede" },
-            "Locked to one machine. A browser can't open it. On that machine, run:",
+            "Locked to a recipient's key. A browser can't open it. On the machine that holds the key, run:",
           ),
           pullHint(link, context.announce, ""),
         ],
         [h("a", { class: "text-button", href: "/" }, "PRINT YOUR OWN")],
       ],
       feed: true,
-      message: "This stub is locked to one machine. Open it there with the stubs command line.",
+      message: "This stub is locked to a recipient's key. Use the stubs command line on that key's machine.",
     },
     context.announce,
   );
 }
 
-function renderVoid(receipt: HTMLElement, context: RevealContext) {
+function renderVoid(receipt: HTMLElement, context: RevealContext, focusHeading = false) {
   context.finish();
   renderMessage(receipt, context, {
     title: "NOTHING HERE",
@@ -314,13 +339,14 @@ function renderVoid(receipt: HTMLElement, context: RevealContext) {
       "Already opened, or expired. Either way it's gone. Ask the sender for a new one.",
     stamped: true,
     message: "This ticket is void.",
-  });
+  }, focusHeading);
 }
 
 function renderMessage(
   receipt: HTMLElement,
   context: RevealContext,
   message: { title: string; body: string; stamped?: boolean; retry?: () => void; message?: string },
+  focusHeading = false,
 ) {
   let retry: HTMLButtonElement | undefined;
   if (message.retry) {
@@ -333,11 +359,12 @@ function renderMessage(
     {
       stamped: message.stamped,
       sections: [
-        [h("p", { class: "admit" }, message.title), h("p", { class: "lede" }, message.body)],
+        [h("h2", { class: "admit" }, message.title), h("p", { class: "lede" }, message.body)],
         [retry, h("a", { class: "text-button", href: "/" }, "PRINT YOUR OWN")],
       ],
       feed: true,
       message: message.message ?? `${message.title}. ${message.body}`,
+      focusHeading,
     },
     context.announce,
   );
